@@ -4,6 +4,7 @@ node_modules/
 *.db-wal
 .temp/
 whatsapp-exports/
+data/
 .DS_Store
 .env
 dist/

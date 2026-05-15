@@ -21,6 +21,8 @@ npm install
 
 ### Option 1: Docker (Recommended)
 
+**Using pre-built image:**
+
 1. Place your WhatsApp `.zip` export files in the `./whatsapp-exports` directory (or mount your own volume)
 2. Start with Docker Compose:
 
@@ -28,7 +30,15 @@ npm install
 docker-compose up -d
 ```
 
-Or with Docker directly:
+**Building locally (development):**
+
+Use `docker-compose.dev.yml` to build from source:
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+Or build and run manually:
 
 ```bash
 docker build -t whatsapp-export-viewer .
@@ -68,7 +78,7 @@ Environment variables:
 |----------|---------|-------------|
 | `WHATSAPP_EXPORTS_DIR` | `./whatsapp-exports` | Directory to watch for `.zip` files |
 | `TEMP_DIR` | `./.temp` | Temporary extraction directory |
-| `DB_PATH` | `./whatsapp.db` | SQLite database file path |
+| `DB_PATH` | `./whatsapp.db` | SQLite database file path (in Docker: `/app/data/whatsapp.db`) |
 | `PORT` | `3000` | Server port |
 | `REINDEX_ON_STARTUP` | `false` | Reindex all zips on server startup |
 

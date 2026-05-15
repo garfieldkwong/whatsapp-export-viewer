@@ -5,6 +5,7 @@ dist
 *.db-wal
 .temp
 whatsapp-exports
+data
 .git
 .gitignore
 .env

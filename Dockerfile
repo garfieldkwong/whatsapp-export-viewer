@@ -28,17 +28,18 @@ RUN npm ci --omit=dev
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
-# Create directories for data and exports
-RUN mkdir -p whatsapp-exports .temp
+# Create directories for data, exports, and temp
+RUN mkdir -p data whatsapp-exports .temp
 
 # Expose port
-EXPOSE 3000
+EXPOSE 4000
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
 ENV TEMP_DIR=/app/.temp
+ENV DB_PATH=/app/data/whatsapp.db
 
 # Start the server
 CMD ["node", "dist/server/index.js"]

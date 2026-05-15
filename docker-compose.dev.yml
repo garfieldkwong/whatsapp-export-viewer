@@ -1,9 +1,10 @@
+# Development version - builds from Dockerfile instead of using pre-built image
+# Use this with: docker-compose -f docker-compose.dev.yml up -d
 version: '3.8'
 
 services:
   whatsapp-export-viewer:
-    # Use your pre-built Docker image here
-    image: whatsapp-export-viewer:latest
+    build: .
     container_name: whatsapp-export-viewer
     ports:
       - "3000:3000"
