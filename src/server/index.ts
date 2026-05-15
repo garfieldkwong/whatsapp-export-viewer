@@ -189,10 +189,20 @@ async function start(): Promise<void> {
   console.log('Cleaning temp directory...');
   cleanupAllTemp(tempDir);
 
+  // Force garbage collection if available (node --gc)
+  if (global.gc) {
+    global.gc();
+  }
+
   // Index existing files if configured
   if (CONFIG.REINDEX_ON_STARTUP) {
     console.log('Reindexing existing files...');
-    await reindexAll(watchDir, db, tempDir);
+    try {
+      await reindexAll(watchDir, db, tempDir);
+      if (global.gc) global.gc();
+    } catch (error) {
+      console.error('Error during reindex:', error);
+    }
   } else {
     console.log('Skipping reindex on startup (set REINDEX_ON_STARTUP=true to enable)');
   }

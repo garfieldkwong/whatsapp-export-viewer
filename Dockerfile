@@ -41,5 +41,5 @@ ENV WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
 ENV TEMP_DIR=/app/.temp
 ENV DB_PATH=/app/data/whatsapp.db
 
-# Start the server
-CMD ["node", "dist/server/index.js"]
+# Start the server with GC enabled for better memory management
+CMD ["node", "--expose-gc", "dist/server/index.js"]

@@ -6,19 +6,24 @@ services:
     image: whatsapp-export-viewer:latest
     container_name: whatsapp-export-viewer
     ports:
-      - "3000:3000"
+      - "4000:4000"
     volumes:
       # Mount your WhatsApp export directory
-      - ./whatsapp-exports:/app/whatsapp-exports
+      - /share/share/whatsapp_export/zips:/app/whatsapp-exports
       # Optional: Persist database
-      - ./data:/app/data
+      # - ./data:/app/data
     environment:
       - PORT=3000
       - WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
       - TEMP_DIR=/app/.temp
       - DB_PATH=/app/data/whatsapp.db
+      - NODE_OPTIONS=--max-old-space-size=512
       # Uncomment to reindex on container start
-      # - REINDEX_ON_STARTUP=true
+      - REINDEX_ON_STARTUP=true
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     restart: unless-stopped
 
 volumes:

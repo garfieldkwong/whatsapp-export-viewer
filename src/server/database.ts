@@ -193,28 +193,34 @@ export class WhatsAppDatabase {
   }
 
   // Insert messages in batch for performance
+  // Process in chunks to avoid OOM on large chats
   insertMessages(messages: MessageInput[]): void {
     const insert = this.db.prepare(`
       INSERT INTO messages (chat_id, position, date, time, sender, text,
                            is_system_message, media_filename, media_type)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const insertMany = this.db.transaction((msgs: MessageInput[]) => {
-      for (const msg of msgs) {
-        insert.run(
-          msg.chatId,
-          msg.position,
-          msg.date,
-          msg.time,
-          msg.sender || null,
-          msg.text,
-          msg.isSystemMessage ? 1 : 0,
-          msg.mediaFilename || null,
-          msg.mediaType || null
-        );
-      }
-    });
-    insertMany(messages);
+    const CHUNK_SIZE = 5000;
+
+    for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
+      const chunk = messages.slice(i, i + CHUNK_SIZE);
+      const insertMany = this.db.transaction((msgs: MessageInput[]) => {
+        for (const msg of msgs) {
+          insert.run(
+            msg.chatId,
+            msg.position,
+            msg.date,
+            msg.time,
+            msg.sender || null,
+            msg.text,
+            msg.isSystemMessage ? 1 : 0,
+            msg.mediaFilename || null,
+            msg.mediaType || null
+          );
+        }
+      });
+      insertMany(chunk);
+    }
   }
 
   // Delete all messages for a chat
