@@ -1,0 +1,9 @@
+node_modules/
+*.db
+*.db-shm
+*.db-wal
+.temp/
+whatsapp-exports/
+.DS_Store
+.env
+dist/

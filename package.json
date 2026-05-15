@@ -1,0 +1,40 @@
+{
+  "name": "whatsapp-export-viewer",
+  "version": "1.0.0",
+  "description": "Local web viewer for WhatsApp ZIP exports with lazy loading and WhatsApp-style UI",
+  "main": "dist/server/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "tsc",
+    "build:client": "esbuild src/public/app.ts --bundle --minify --outfile=dist/public/app.js --format=esm --target=es2020 --sourcemap && cp src/public/index.html dist/public/ && cp src/public/styles.css dist/public/",
+    "start": "node dist/server/index.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "tsc --watch",
+    "dev:client": "esbuild src/public/app.ts --bundle --outfile=dist/public/app.js --format=esm --target=es2020 --sourcemap --watch"
+  },
+  "keywords": [
+    "whatsapp",
+    "export",
+    "viewer",
+    "chat"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "better-sqlite3": "^11.7.0",
+    "chokidar": "^4.0.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/chokidar": "^1.7.5",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.2",
+    "esbuild": "^0.24.2",
+    "nodemon": "^3.1.9",
+    "typescript": "^5.7.2"
+  }
+}

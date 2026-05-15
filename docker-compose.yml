@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  whatsapp-export-viewer:
+    build: .
+    container_name: whatsapp-export-viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount your WhatsApp export directory
+      - ./whatsapp-exports:/app/whatsapp-exports
+      # Optional: Persist database
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
+      - TEMP_DIR=/app/.temp
+      - DB_PATH=/app/data/whatsapp.db
+      # Uncomment to reindex on container start
+      # - REINDEX_ON_STARTUP=true
+    restart: unless-stopped
+
+volumes:
+  whatsapp-exports:
+  data:
