@@ -1,6 +1,6 @@
 import { watch, FSWatcher } from 'chokidar';
 import { join, basename } from 'path';
-import { indexZip, reindexChat } from './indexer.js';
+import { indexZip, reindexChat, createChatId } from './indexer.js';
 import { WhatsAppDatabase } from './database.js';
 
 // Track in-flight operations to avoid duplicate processing
@@ -18,12 +18,16 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     },
   }) as FSWatcher;
 
+  // Map filename to chatId for lookups
+  const filenameToChatId = new Map<string, string>();
+
   // Watch for new zip files
   watcher.on('add', async (filePath: string) => {
     if (!filePath.endsWith('.zip')) return;
 
     const filename = basename(filePath);
-    const chatId = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const chatId = createChatId(filename);
+    filenameToChatId.set(filename, chatId);
 
     if (processing.has(chatId)) {
       console.log(`Skipping ${filename}: already processing`);
@@ -46,7 +50,8 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     if (!filePath.endsWith('.zip')) return;
 
     const filename = basename(filePath);
-    const chatId = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const chatId = createChatId(filename);
+    filenameToChatId.set(filename, chatId);
 
     if (processing.has(chatId)) return;
 
@@ -67,13 +72,20 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     if (!filePath.endsWith('.zip')) return;
 
     const filename = basename(filePath);
-    const chatId = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const chatId = filenameToChatId.get(filename);
 
     console.log(`Zip file deleted: ${filename}`);
+
+    if (!chatId) {
+      console.warn(`No chat ID found for ${filename}, skipping database delete`);
+      filenameToChatId.delete(filename);
+      return;
+    }
 
     try {
       db.deleteChat(chatId);
       console.log(`Removed chat ${chatId} from database`);
+      filenameToChatId.delete(filename);
     } catch (error) {
       console.error(`Failed to delete chat ${chatId}:`, error);
     }

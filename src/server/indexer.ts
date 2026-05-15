@@ -3,6 +3,17 @@ import { join, basename } from 'path';
 import { WhatsAppDatabase } from './database.js';
 import { readdirSync, statSync } from 'fs';
 
+// Create a safe chat ID from filename (for database keys)
+export function createChatId(filename: string): string {
+  // Remove .zip extension
+  const baseName = filename.replace(/\.zip$/i, '');
+  // Hash the filename if it contains non-ASCII characters to create a safe ID
+  // Use MD5 hash of the filename for safe database key
+  const crypto = require('crypto');
+  const hash = crypto.createHash('md5').update(baseName).digest('hex');
+  return `chat_${hash}`;
+}
+
 // Generate display name from filename
 function getDisplayName(filename: string): string {
   // Remove .zip extension and common prefixes
@@ -31,7 +42,7 @@ function getPreview(text: string, maxLength: number = 50): string {
 // Index a single zip file
 export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
   const filename = basename(zipPath);
-  const chatId = filename.replace(/\.zip$/i, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const chatId = createChatId(filename);
 
   console.log(`Indexing: ${filename}`);
 
