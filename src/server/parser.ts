@@ -139,8 +139,9 @@ export function extractAndParseZip(zipPath: string, tempDir: string): Extraction
     zip.extractAllTo(extractDir, true);
 
     // Find the .txt file (usually the chat history)
+    // WhatsApp exports typically use "_chat.txt" as the filename
     const files = readdirSync(extractDir);
-    const txtFile = files.find(f => f.endsWith('.txt') && !f.startsWith('_'));
+    const txtFile = files.find(f => f.endsWith('.txt'));
 
     if (!txtFile) {
       throw new Error('No .txt file found in zip archive');
