@@ -104,7 +104,7 @@ app.get('/api/search', (req: Request, res: Response) => {
 });
 
 // Serve media files
-app.get('/api/media/:chatId/:filename(*)', (req: Request, res: Response) => {
+app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) => {
   try {
     const { chatId, filename } = req.params as { chatId: string; filename: string };
     const chat = db.getChat(chatId) as Chat & { originalPath: string };
@@ -120,7 +120,7 @@ app.get('/api/media/:chatId/:filename(*)', (req: Request, res: Response) => {
       mediaPath = join(activeExtractions.get(chatId)!, filename);
     } else {
       // Extract temporarily
-      const { extractDir } = extractAndParseZip(chat.originalPath, tempDir);
+      const { extractDir } = await extractAndParseZip(chat.originalPath, tempDir);
       activeExtractions.set(chatId, extractDir);
 
       // Set up cleanup after inactivity (5 minutes)

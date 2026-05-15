@@ -82,7 +82,7 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
 
   if (isZip) {
     try {
-      const { chatId, extractDir, txtFile, messages, mediaFiles } = extractAndParseZip(zipPath, tempDir);
+      const { chatId, extractDir, txtFile, messages, mediaFiles } = await extractAndParseZip(zipPath, tempDir);
 
       if (messages.length === 0) {
         console.log(`  No messages found in ${txtFile}`);

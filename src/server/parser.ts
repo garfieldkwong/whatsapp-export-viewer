@@ -131,28 +131,28 @@ function openZip(zipPath: string): Promise<yauzl.ZipFile> {
 }
 
 // Read an entry from the zip as a string
-function readEntryToString(entry: yauzl.Entry): Promise<string> {
+function readEntryToString(zipfile: yauzl.ZipFile, entry: yauzl.Entry): Promise<string> {
   return new Promise((resolve, reject) => {
-    entry.openReadStream((err, readStream) => {
+    zipfile.openReadStream(entry, (err: Error | null, readStream: NodeJS.ReadableStream | undefined) => {
       if (err) { reject(err); return; }
       const chunks: Buffer[] = [];
-      readStream.on('data', (chunk: Buffer) => chunks.push(chunk));
-      readStream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-      readStream.on('error', reject);
+      readStream!.on('data', (chunk: Buffer) => chunks.push(chunk));
+      readStream!.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      readStream!.on('error', reject);
     });
   });
 }
 
 // Extract a single entry from zip to disk
-function extractEntry(entry: yauzl.Entry, destPath: string): Promise<void> {
+function extractEntry(zipfile: yauzl.ZipFile, entry: yauzl.Entry, destPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    entry.openReadStream((err, readStream) => {
+    zipfile.openReadStream(entry, (err: Error | null, readStream: NodeJS.ReadableStream | undefined) => {
       if (err) { reject(err); return; }
       const writeStream = createWriteStream(destPath);
-      readStream.pipe(writeStream);
+      readStream!.pipe(writeStream);
       writeStream.on('finish', resolve);
       writeStream.on('error', reject);
-      readStream.on('error', reject);
+      readStream!.on('error', reject);
     });
   });
 }
@@ -193,7 +193,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
       if (entryName.endsWith('.txt')) {
         // Read txt content into memory (small file)
         txtFile = entryName;
-        readEntryToString(entry)
+        readEntryToString(zipfile, entry)
           .then(content => {
             txtContent = content;
             pendingEntries--;
@@ -263,7 +263,7 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
 
     zipfile.on('entry', (entry: yauzl.Entry) => {
       if (basename(entry.fileName) === targetFilename) {
-        extractEntry(entry, destPath)
+        extractEntry(zipfile, entry, destPath)
           .then(() => {
             zipfile.close();
             resolve(destPath);
