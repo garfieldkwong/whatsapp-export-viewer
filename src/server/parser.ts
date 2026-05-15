@@ -1,8 +1,21 @@
 import AdmZip from 'adm-zip';
 import { readdirSync, mkdirSync, rmSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { Message } from './database.js';
 
 export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'unknown';
+
+export interface Message {
+  chatId: string;
+  position: number;
+  date: string;
+  time: string;
+  sender: string | null;
+  text: string;
+  isSystemMessage: boolean;
+  mediaFilename: string | null;
+  mediaType: MediaType | null;
+}
 
 export interface Message {
   chatId: string;
@@ -60,6 +73,12 @@ function getMediaType(filename: string): MediaType {
 function cleanText(text: string): string {
   // Remove LRM, RLM, and other directional marks
   return text.replace(/[‎‏‪-‮⁦-⁩]/g, '').trim();
+}
+
+// Parse WhatsApp export text format (from txt file)
+export function parseTextFile(textFilePath: string, chatId: string): Message[] {
+  const textContent = readFileSync(textFilePath, 'utf-8');
+  return parseWhatsAppText(textContent, chatId);
 }
 
 // Parse WhatsApp export text format

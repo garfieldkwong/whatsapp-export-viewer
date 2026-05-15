@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { CONFIG } from './config.js';
-import { Message, MediaType } from './parser.js';
+import { MediaType } from './parser.js';
 
 export interface Chat {
   id: string;
@@ -25,7 +25,21 @@ export interface ChatInput {
 }
 
 export interface MessageOutput {
+  chatId: string;
   id: number;
+  date: string;
+  time: string;
+  sender: string | null;
+  text: string;
+  isSystemMessage: boolean;
+  mediaFilename: string | null;
+  mediaType: MediaType | null;
+  position: number;
+}
+
+export interface MessageInput {
+  chatId: string;
+  position: number;
   date: string;
   time: string;
   sender: string | null;
@@ -167,13 +181,13 @@ export class WhatsAppDatabase {
   }
 
   // Insert messages in batch for performance
-  insertMessages(messages: Message[]): void {
+  insertMessages(messages: MessageInput[]): void {
     const insert = this.db.prepare(`
       INSERT INTO messages (chat_id, position, date, time, sender, text,
                            is_system_message, media_filename, media_type)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const insertMany = this.db.transaction((msgs: Message[]) => {
+    const insertMany = this.db.transaction((msgs: MessageInput[]) => {
       for (const msg of msgs) {
         insert.run(
           msg.chatId,

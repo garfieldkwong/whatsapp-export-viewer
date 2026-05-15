@@ -21,9 +21,9 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
   // Map filename to chatId for lookups
   const filenameToChatId = new Map<string, string>();
 
-  // Watch for new zip files
+  // Watch for new zip or txt files
   watcher.on('add', async (filePath: string) => {
-    if (!filePath.endsWith('.zip')) return;
+    if (!filePath.endsWith('.zip') && !filePath.endsWith('.txt')) return;
 
     const filename = basename(filePath);
     const chatId = createChatId(filename);
@@ -45,7 +45,7 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     }
   });
 
-  // Watch for file updates (replaced zip files)
+  // Watch for file updates (only re-index zip files, not txt)
   watcher.on('change', async (filePath: string) => {
     if (!filePath.endsWith('.zip')) return;
 
@@ -67,14 +67,14 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     }
   });
 
-  // Watch for deleted zip files
+  // Watch for deleted zip or txt files
   watcher.on('unlink', async (filePath: string) => {
-    if (!filePath.endsWith('.zip')) return;
+    if (!filePath.endsWith('.zip') && !filePath.endsWith('.txt')) return;
 
     const filename = basename(filePath);
     const chatId = filenameToChatId.get(filename);
 
-    console.log(`Zip file deleted: ${filename}`);
+    console.log(`File deleted: ${filename}`);
 
     if (!chatId) {
       console.warn(`No chat ID found for ${filename}, skipping database delete`);
