@@ -40,7 +40,7 @@ export function createChatId(filename: string): string {
 }
 
 // Index all txt files found inside a zip
-function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
+async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
   for (const txtFile of txtFiles) {
     const txtFilePath = join(extractDir, txtFile);
     const chatId = createChatId(txtFile);

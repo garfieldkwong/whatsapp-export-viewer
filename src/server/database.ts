@@ -2,6 +2,18 @@ import Database from 'better-sqlite3';
 import { CONFIG } from './config.js';
 import { MediaType } from './parser.js';
 
+export type Message = {
+  chatId: string;
+  position: number;
+  date: string;
+  time: string;
+  sender: string | null;
+  text: string;
+  isSystemMessage: boolean;
+  mediaFilename: string | null;
+  mediaType: MediaType | null;
+}
+
 export interface Chat {
   id: string;
   filename: string;
