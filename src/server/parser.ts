@@ -242,6 +242,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         console.log(`[PARSER]     Skipping (directory or hidden)`);
         pendingEntries--;
         if (pendingEntries === 0) finish();
+        zipfile.readEntry();
         return;
       }
 
@@ -255,11 +256,13 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
             console.log(`[PARSER]     Read ${content.length} bytes from txt file`);
             pendingEntries--;
             if (pendingEntries === 0) finish();
+            zipfile.readEntry();
           })
           .catch(err => {
             console.error(`[PARSER]     Error reading txt:`, err);
             pendingEntries--;
             if (pendingEntries === 0) finish();
+            zipfile.readEntry();
           });
       } else {
         // Just track media files, don't extract yet
@@ -267,6 +270,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         console.log(`[PARSER]     Tracking as media file`);
         pendingEntries--;
         if (pendingEntries === 0) finish();
+        zipfile.readEntry();
       }
     });
 
@@ -295,6 +299,10 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
 
 // Extract a specific file from a zip to the given directory (on-demand for media)
 export async function extractFileFromZip(zipPath: string, targetFilename: string, tempDir: string): Promise<string> {
+  if (!targetFilename) {
+    throw new Error('targetFilename is required');
+  }
+
   const filename = basename(zipPath);
   const baseName = filename.replace(/\.zip$/i, '');
   const extractDir = join(tempDir, baseName);
@@ -308,13 +316,19 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
     return destPath;
   }
 
+  console.log(`[EXTRACT] Extracting ${targetFilename} from ${zipPath}`);
   const zipfile = await openZip(zipPath);
+  zipfile.readEntry();
 
   return new Promise((resolve, reject) => {
-    zipfile.once('error', reject);
+    let found = false;
 
     zipfile.on('entry', (entry: yauzl.Entry) => {
-      if (basename(entry.fileName) === targetFilename) {
+      const entryName = basename(entry.fileName);
+      console.log(`[EXTRACT] Checking entry: ${entryName} vs ${targetFilename}`);
+
+      if (entryName === targetFilename) {
+        found = true;
         extractEntry(zipfile, entry, destPath)
           .then(() => {
             zipfile.close();
@@ -324,14 +338,21 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
             zipfile.close();
             reject(err);
           });
+      } else {
+        zipfile.readEntry();
       }
-      // yauzl requires us to readEntryReadStream for each entry
-      // but we auto-close after finding our target
     });
 
     zipfile.on('end', () => {
+      if (!found) {
+        zipfile.close();
+        reject(new Error(`File "${targetFilename}" not found in zip`));
+      }
+    });
+
+    zipfile.on('error', (err: Error) => {
       zipfile.close();
-      reject(new Error(`File "${targetFilename}" not found in zip`));
+      reject(err);
     });
   });
 }

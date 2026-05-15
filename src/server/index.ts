@@ -107,30 +107,26 @@ app.get('/api/search', (req: Request, res: Response) => {
 app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) => {
   try {
     const { chatId, filename } = req.params as { chatId: string; filename: string };
-    const chat = db.getChat(chatId) as Chat & { originalPath: string };
+    console.log(`[MEDIA] Request: chatId=${chatId}, filename=${filename}`);
+
+    if (!filename) {
+      return res.status(400).json({ error: 'Filename is required' });
+    }
+
+    const chat = db.getChat(chatId);
+    console.log(`[MEDIA] Chat found:`, chat ? 'yes' : 'no');
 
     if (!chat) {
       return res.status(404).json({ error: 'Chat not found' });
     }
 
-    let mediaPath: string;
+    const chatWithOriginalPath = chat as Chat & { originalPath: string };
+    console.log(`[MEDIA] originalPath:`, chatWithOriginalPath.originalPath);
 
-    // Check if chat is already extracted
-    if (activeExtractions.has(chatId)) {
-      mediaPath = join(activeExtractions.get(chatId)!, filename);
-    } else {
-      // Extract temporarily
-      const { extractDir } = await extractAndParseZip(chat.originalPath, tempDir);
-      activeExtractions.set(chatId, extractDir);
-
-      // Set up cleanup after inactivity (5 minutes)
-      setTimeout(() => {
-        cleanupExtraction(extractDir);
-        activeExtractions.delete(chatId);
-      }, 5 * 60 * 1000);
-
-      mediaPath = join(extractDir, filename);
-    }
+    // Extract file from zip on-demand
+    const { extractFileFromZip } = await import('./parser.js');
+    const mediaPath = await extractFileFromZip(chatWithOriginalPath.originalPath, filename, tempDir);
+    console.log(`[MEDIA] Extracted to: ${mediaPath}`);
 
     if (!existsSync(mediaPath)) {
       return res.status(404).json({ error: 'Media file not found' });

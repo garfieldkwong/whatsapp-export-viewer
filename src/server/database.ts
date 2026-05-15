@@ -257,7 +257,7 @@ export class WhatsAppDatabase {
   // Get a single chat
   getChat(chatId: string): Chat | undefined {
     const stmt = this.db.prepare(`
-      SELECT id, filename, display_name as displayName, message_count as messageCount,
+      SELECT id, filename, original_path as originalPath, display_name as displayName, message_count as messageCount,
              first_message_date as firstMessageDate, last_message_date as lastMessageDate,
              last_message_preview as lastMessagePreview
       FROM chats WHERE id = ?
