@@ -124,7 +124,7 @@ export function parseTextFile(textFilePath: string, chatId: string): Message[] {
 function openZip(zipPath: string): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
     console.log(`[PARSER] openZip: ${zipPath}`);
-    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+    yauzl.open(zipPath, { lazyEntries: false }, (err, zipfile) => {
       if (err) {
         console.error(`[PARSER] openZip error:`, err);
         reject(err);
@@ -189,8 +189,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
   const zipfile = await openZip(zipPath);
   console.log(`[PARSER]   Zip opened, reading entries...`);
   console.log(`[PARSER]   zipfile object:`, { entryCount: zipfile.entryCount });
-  console.log(`[PARSER]   Calling zipfile.readEntry() to start processing...`);
-  zipfile.readEntry();
 
   return new Promise((resolve, reject) => {
     let txtFile = '';
@@ -209,7 +207,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
       console.log(`[PARSER]   Finish called. txtFile: ${txtFile}, txtContent length: ${txtContent.length}, mediaFiles: ${mediaFiles.length}`);
 
       if (!txtFile) {
-        console.error(`[PARSER]   No txt file found in zip!`);
+        console.error(`[PARSER]   No txt file found in zip! Entries seen: ${entryCount}`);
         zipfile.close();
         reject(new Error('No .txt file found in zip archive'));
         return;
@@ -242,7 +240,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         console.log(`[PARSER]     Skipping (directory or hidden)`);
         pendingEntries--;
         if (pendingEntries === 0) finish();
-        zipfile.readEntry();
         return;
       }
 
@@ -256,13 +253,11 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
             console.log(`[PARSER]     Read ${content.length} bytes from txt file`);
             pendingEntries--;
             if (pendingEntries === 0) finish();
-            zipfile.readEntry();
           })
           .catch(err => {
             console.error(`[PARSER]     Error reading txt:`, err);
             pendingEntries--;
             if (pendingEntries === 0) finish();
-            zipfile.readEntry();
           });
       } else {
         // Just track media files, don't extract yet
@@ -270,7 +265,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         console.log(`[PARSER]     Tracking as media file`);
         pendingEntries--;
         if (pendingEntries === 0) finish();
-        zipfile.readEntry();
       }
     });
 
@@ -318,7 +312,6 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
 
   console.log(`[EXTRACT] Extracting ${targetFilename} from ${zipPath}`);
   const zipfile = await openZip(zipPath);
-  zipfile.readEntry();
 
   return new Promise((resolve, reject) => {
     let found = false;
@@ -338,8 +331,6 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
             zipfile.close();
             reject(err);
           });
-      } else {
-        zipfile.readEntry();
       }
     });
 

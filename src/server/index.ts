@@ -182,37 +182,14 @@ app.post('/api/reindex', async (req: Request, res: Response) => {
 // Log memory usage
 function logMemory(label: string): void {
   const usage = process.memoryUsage();
-  console.log(`[MEMORY] ${label}:`, {
-    rss: `${Math.round(usage.rss / 1024 / 1024)}MB`,
-    heapUsed: `${Math.round(usage.heapUsed / 1024 / 1024)}MB`,
-    heapTotal: `${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
-    external: `${Math.round(usage.external / 1024 / 1024)}MB`,
-  });
-}
-
-// Watch memory continuously during startup
-function startMemoryWatch(intervalMs: number = 1000): NodeJS.Timeout {
-  return setInterval(() => {
-    const usage = process.memoryUsage();
-    const mb = (v: number) => Math.round(v / 1024 / 1024);
-    console.log(`[MEM WATCH] RSS:${mb(usage.rss)}MB heap:${mb(usage.heapUsed)}/${mb(usage.heapTotal)}MB external:${mb(usage.external)}MB`);
-  }, intervalMs);
-}
-
-// Force output immediately
-function flushLogs(): void {
-  if (process.stdout.write) process.stdout.write?.('');
-  if (process.stderr.write) process.stderr.write?.('');
+  const mb = (v: number) => Math.round(v / 1024 / 1024);
+  console.log(`[MEMORY] ${label}: RSS=${mb(usage.rss)}MB heap=${mb(usage.heapUsed)}/${mb(usage.heapTotal)}MB external=${mb(usage.external)}MB`);
 }
 
 // Start server
 async function start(): Promise<void> {
-  // Enable immediate output
-  const memoryWatch = startMemoryWatch(2000);
-
   // Clean temp directory on startup
   console.log('Cleaning temp directory...');
-  flushLogs();
   cleanupAllTemp(tempDir);
 
   // Force garbage collection if available (node --gc)
@@ -221,30 +198,21 @@ async function start(): Promise<void> {
   }
 
   logMemory('After startup cleanup');
-  flushLogs();
 
   // Index existing files if configured
   if (CONFIG.REINDEX_ON_STARTUP) {
     console.log('Reindexing existing files...');
-    flushLogs();
     try {
       await reindexAll(watchDir, db, tempDir);
-      flushLogs();
       if (global.gc) global.gc();
       logMemory('After reindex');
-      flushLogs();
     } catch (error) {
       console.error('Error during reindex:', error);
       console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
-      flushLogs();
     }
   } else {
     console.log('Skipping reindex on startup (set REINDEX_ON_STARTUP=true to enable)');
-    flushLogs();
   }
-
-  // Stop memory watch
-  clearInterval(memoryWatch);
 
   // Start file watcher
   startWatcher(watchDir, db, tempDir);
