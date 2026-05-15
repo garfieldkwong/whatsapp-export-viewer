@@ -123,9 +123,18 @@ export function parseTextFile(textFilePath: string, chatId: string): Message[] {
 // Open a zip file using yauzl (streaming, supports files > 2 GiB)
 function openZip(zipPath: string): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
+    console.log(`[PARSER] openZip: ${zipPath}`);
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-      if (err) reject(err);
-      else resolve(zipfile);
+      if (err) {
+        console.error(`[PARSER] openZip error:`, err);
+        reject(err);
+      } else {
+        console.log(`[PARSER] openZip success, zipfile:`, zipfile ? 'yes' : 'no');
+        if (zipfile) {
+          console.log(`[PARSER]   entryCount: ${zipfile.entryCount}`);
+        }
+        resolve(zipfile);
+      }
     });
   });
 }
@@ -179,6 +188,9 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
   console.log(`[PARSER]   Opening zip file...`);
   const zipfile = await openZip(zipPath);
   console.log(`[PARSER]   Zip opened, reading entries...`);
+  console.log(`[PARSER]   zipfile object:`, { entryCount: zipfile.entryCount });
+  console.log(`[PARSER]   Calling zipfile.readEntry() to start processing...`);
+  zipfile.readEntry();
 
   return new Promise((resolve, reject) => {
     let txtFile = '';
@@ -186,61 +198,18 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
     const mediaFiles: string[] = [];
     let pendingEntries = 0;
     let entryCount = 0;
+    let finished = false;
 
-    zipfile.on('entry', (entry: yauzl.Entry) => {
-      entryCount++;
-      pendingEntries++;
-
-      const entryName = basename(entry.fileName);
-
-      // Skip directories and hidden files
-      if (/\/$/.test(entry.fileName) || entryName.startsWith('.')) {
-        pendingEntries--;
-        if (pendingEntries === 0) finish();
+    const finish = () => {
+      if (finished) {
+        console.log(`[PARSER]   Finish called multiple times, skipping`);
         return;
       }
-
-      console.log(`[PARSER]   Entry ${entryCount}: ${entryName}`);
-
-      if (entryName.endsWith('.txt')) {
-        // Read txt content into memory (small file)
-        txtFile = entryName;
-        console.log(`[PARSER]   Reading txt file: ${entryName}`);
-        readEntryToString(zipfile, entry)
-          .then(content => {
-            txtContent = content;
-            console.log(`[PARSER]   Read ${content.length} bytes from txt file`);
-            pendingEntries--;
-            if (pendingEntries === 0) finish();
-          })
-          .catch(err => {
-            console.error(`[PARSER]   Error reading txt:`, err);
-            pendingEntries--;
-            if (pendingEntries === 0) finish();
-          });
-      } else {
-        // Just track media files, don't extract yet
-        mediaFiles.push(entryName);
-        pendingEntries--;
-        if (pendingEntries === 0) finish();
-      }
-    });
-
-    zipfile.on('end', () => {
-      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pending: ${pendingEntries}`);
-      // If no entries were found
-      if (pendingEntries === 0) finish();
-    });
-
-    zipfile.on('error', (err: Error) => {
-      console.error(`[PARSER]   Zip error:`, err);
-      reject(err);
-    });
-
-    function finish() {
-      console.log(`[PARSER]   Finish called. txtFile: ${txtFile}, txtContent length: ${txtContent.length}`);
+      finished = true;
+      console.log(`[PARSER]   Finish called. txtFile: ${txtFile}, txtContent length: ${txtContent.length}, mediaFiles: ${mediaFiles.length}`);
 
       if (!txtFile) {
+        console.error(`[PARSER]   No txt file found in zip!`);
         zipfile.close();
         reject(new Error('No .txt file found in zip archive'));
         return;
@@ -258,7 +227,69 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         messages,
         mediaFiles,
       });
-    }
+    };
+
+    zipfile.on('entry', (entry: yauzl.Entry) => {
+      entryCount++;
+      pendingEntries++;
+
+      const entryName = basename(entry.fileName);
+
+      console.log(`[PARSER]   Entry ${entryCount}: ${entry.fileName} (basename: ${entryName})`);
+
+      // Skip directories and hidden files
+      if (/\/$/.test(entry.fileName) || entryName.startsWith('.')) {
+        console.log(`[PARSER]     Skipping (directory or hidden)`);
+        pendingEntries--;
+        if (pendingEntries === 0) finish();
+        return;
+      }
+
+      if (entryName.endsWith('.txt')) {
+        // Read txt content into memory (small file)
+        txtFile = entryName;
+        console.log(`[PARSER]     Reading txt file: ${entryName}`);
+        readEntryToString(zipfile, entry)
+          .then(content => {
+            txtContent = content;
+            console.log(`[PARSER]     Read ${content.length} bytes from txt file`);
+            pendingEntries--;
+            if (pendingEntries === 0) finish();
+          })
+          .catch(err => {
+            console.error(`[PARSER]     Error reading txt:`, err);
+            pendingEntries--;
+            if (pendingEntries === 0) finish();
+          });
+      } else {
+        // Just track media files, don't extract yet
+        mediaFiles.push(entryName);
+        console.log(`[PARSER]     Tracking as media file`);
+        pendingEntries--;
+        if (pendingEntries === 0) finish();
+      }
+    });
+
+    zipfile.on('end', () => {
+      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pending: ${pendingEntries}`);
+      // If no entries were found
+      if (pendingEntries === 0 && !finished) finish();
+    });
+
+    zipfile.on('error', (err: Error) => {
+      console.error(`[PARSER]   Zip error:`, err);
+      console.error(`[PARSER]   Error stack:`, err.stack);
+      reject(err);
+    });
+
+    // Add a timeout in case the zip file is malformed
+    setTimeout(() => {
+      if (!finished) {
+        console.error(`[PARSER]   TIMEOUT after 30 seconds. entries: ${entryCount}, pending: ${pendingEntries}`);
+        console.error(`[PARSER]   Forcing finish...`);
+        finish();
+      }
+    }, 30000);
   });
 }
 
