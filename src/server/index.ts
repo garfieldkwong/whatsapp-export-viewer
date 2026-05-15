@@ -11,9 +11,9 @@ import path from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Ensure directories exist
-const watchDir = join(process.cwd(), CONFIG.WATCH_DIR);
-const tempDir = join(process.cwd(), CONFIG.TEMP_DIR);
+// Resolve paths - use absolute paths directly from config
+const watchDir = CONFIG.WATCH_DIR.startsWith('/') ? CONFIG.WATCH_DIR : join(__dirname, '../', CONFIG.WATCH_DIR);
+const tempDir = CONFIG.TEMP_DIR.startsWith('/') ? CONFIG.TEMP_DIR : join(__dirname, '../', CONFIG.TEMP_DIR);
 mkdirSync(watchDir, { recursive: true });
 mkdirSync(tempDir, { recursive: true });
 
