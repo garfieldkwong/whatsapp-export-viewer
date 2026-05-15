@@ -2,6 +2,7 @@ import { extractAndParseZip, parseTextFile } from './parser.js';
 import { join, basename, dirname } from 'path';
 import { WhatsAppDatabase } from './database.js';
 import { readdirSync, statSync, rmSync, existsSync } from 'fs';
+import { createHash } from 'crypto';
 
 // Generate display name from filename
 function getDisplayName(filename: string): string {
@@ -34,8 +35,7 @@ export function createChatId(filename: string): string {
   const baseName = filename.replace(/\.zip$/i, '');
   // Hash = filename if it contains non-ASCII characters to create a safe ID
   // Use MD5 hash of filename for safe database key
-  const crypto = require('crypto');
-  const hash = crypto.createHash('md5').update(baseName).digest('hex');
+  const hash = createHash('md5').update(baseName).digest('hex');
   return `chat_${hash}`;
 }
 
