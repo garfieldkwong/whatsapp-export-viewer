@@ -13,7 +13,7 @@ services:
       # Optional: Persist database
       # - ./data:/app/data
     environment:
-      - PORT=3000
+      - PORT=4000
       - WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
       - TEMP_DIR=/app/.temp
       - DB_PATH=/app/data/whatsapp.db

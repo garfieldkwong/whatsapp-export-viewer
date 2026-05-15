@@ -183,6 +183,17 @@ app.post('/api/reindex', async (req: Request, res: Response) => {
   }
 });
 
+// Log memory usage
+function logMemory(label: string): void {
+  const usage = process.memoryUsage();
+  console.log(`[MEMORY] ${label}:`, {
+    rss: `${Math.round(usage.rss / 1024 / 1024)}MB`,
+    heapUsed: `${Math.round(usage.heapUsed / 1024 / 1024)}MB`,
+    heapTotal: `${Math.round(usage.heapTotal / 1024 / 1024)}MB`,
+    external: `${Math.round(usage.external / 1024 / 1024)}MB`,
+  });
+}
+
 // Start server
 async function start(): Promise<void> {
   // Clean temp directory on startup
@@ -194,12 +205,15 @@ async function start(): Promise<void> {
     global.gc();
   }
 
+  logMemory('After startup cleanup');
+
   // Index existing files if configured
   if (CONFIG.REINDEX_ON_STARTUP) {
     console.log('Reindexing existing files...');
     try {
       await reindexAll(watchDir, db, tempDir);
       if (global.gc) global.gc();
+      logMemory('After reindex');
     } catch (error) {
       console.error('Error during reindex:', error);
     }

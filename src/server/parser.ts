@@ -164,21 +164,31 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
   const chatId = baseName;
   const extractDir = join(tempDir, chatId);
 
+  console.log(`[PARSER] extractAndParseZip: ${filename}`);
+  console.log(`[PARSER]   zipPath: ${zipPath}`);
+  console.log(`[PARSER]   tempDir: ${tempDir}`);
+  console.log(`[PARSER]   extractDir: ${extractDir}`);
+
   // Clean up existing extraction if present
   if (existsSync(extractDir)) {
+    console.log(`[PARSER]   Cleaning existing extraction dir...`);
     rmSync(extractDir, { recursive: true, force: true });
   }
   mkdirSync(extractDir, { recursive: true });
 
+  console.log(`[PARSER]   Opening zip file...`);
   const zipfile = await openZip(zipPath);
+  console.log(`[PARSER]   Zip opened, reading entries...`);
 
   return new Promise((resolve, reject) => {
     let txtFile = '';
     let txtContent = '';
     const mediaFiles: string[] = [];
     let pendingEntries = 0;
+    let entryCount = 0;
 
     zipfile.on('entry', (entry: yauzl.Entry) => {
+      entryCount++;
       pendingEntries++;
 
       const entryName = basename(entry.fileName);
@@ -190,16 +200,21 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         return;
       }
 
+      console.log(`[PARSER]   Entry ${entryCount}: ${entryName}`);
+
       if (entryName.endsWith('.txt')) {
         // Read txt content into memory (small file)
         txtFile = entryName;
+        console.log(`[PARSER]   Reading txt file: ${entryName}`);
         readEntryToString(zipfile, entry)
           .then(content => {
             txtContent = content;
+            console.log(`[PARSER]   Read ${content.length} bytes from txt file`);
             pendingEntries--;
             if (pendingEntries === 0) finish();
           })
           .catch(err => {
+            console.error(`[PARSER]   Error reading txt:`, err);
             pendingEntries--;
             if (pendingEntries === 0) finish();
           });
@@ -212,22 +227,28 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
     });
 
     zipfile.on('end', () => {
+      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pending: ${pendingEntries}`);
       // If no entries were found
       if (pendingEntries === 0) finish();
     });
 
     zipfile.on('error', (err: Error) => {
+      console.error(`[PARSER]   Zip error:`, err);
       reject(err);
     });
 
     function finish() {
+      console.log(`[PARSER]   Finish called. txtFile: ${txtFile}, txtContent length: ${txtContent.length}`);
+
       if (!txtFile) {
         zipfile.close();
         reject(new Error('No .txt file found in zip archive'));
         return;
       }
 
+      console.log(`[PARSER]   Parsing ${txtContent.length} bytes of text...`);
       const messages = parseWhatsAppText(txtContent, chatId);
+      console.log(`[PARSER]   Parsed ${messages.length} messages`);
 
       zipfile.close();
       resolve({
