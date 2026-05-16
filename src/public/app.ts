@@ -168,6 +168,14 @@ function renderChatView(chat: Chat, messages: Message[]): void {
   // Setup media click handlers
   setupMediaClickHandlers();
 
+  // Scroll to bottom to show latest messages
+  setTimeout(() => {
+    const container = document.getElementById('messagesContainer');
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, 0);
+
   // Setup intersection observer for lazy loading
   setTimeout(() => {
     const trigger = document.getElementById('loadMoreTrigger');
