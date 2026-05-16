@@ -120,12 +120,27 @@ function parseWhatsAppText(textContent: string, chatId: string): Message[] {
     let mediaType: MediaType | null = null;
     let cleanMessage = text;
 
-    // Check for (附件檔案) or (file attached) suffix
-    const mediaMatch = text.match(/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\s*(?:\(附件檔案\)|\(file attached\))?$/i);
-    if (mediaMatch) {
-      mediaFilename = mediaMatch[1];
-      mediaType = getMediaType(mediaFilename);
-      cleanMessage = text.substring(0, mediaMatch.index).trim() || '<Media omitted>';
+    // WhatsApp media attachments can appear in various formats:
+    // - "filename.ext (file attached)"
+    // - "filename.ext (附件檔案)"
+    // - "filename.ext"
+    // - "<attached: filename.ext>"
+    // - "IMG-20240101-WA0001.jpg (file attached)"
+    const mediaPatterns = [
+      /([A-Za-z0-9_\-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
+      /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)(?:>|⟩)/i,
+      /(?:attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)/i,
+    ];
+
+    for (const pattern of mediaPatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        mediaFilename = match[1];
+        mediaType = getMediaType(mediaFilename);
+        // Remove the filename and attachment indicator from the message
+        cleanMessage = text.replace(pattern, '').trim() || '<Media omitted>';
+        break;
+      }
     }
 
     // Check for Chinese media omitted indicators

@@ -98,9 +98,9 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
 
       const chat = {
         id: chatId,
-        filename: txtFile,
+        filename: filename,
         originalPath: zipPath,
-        displayName: getDisplayName(txtFile),
+        displayName: getDisplayName(filename),
         messageCount: messages.length,
         firstMessageDate: firstMsg.date,
         lastMessageDate: lastMsg.date,
@@ -110,7 +110,9 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
 
       console.log(`[DEBUG] Upserting chat ${chatId}...`);
       db.upsertChat(chat);
-      console.log(`[DEBUG] Chat upserted, inserting ${messages.length} messages...`);
+      console.log(`[DEBUG] Chat upserted, deleting old messages and inserting ${messages.length} messages...`);
+      // Delete old messages first to prevent duplicates
+      db.deleteMessages(chatId);
       db.insertMessages(messages);
       console.log(`[DEBUG] Messages inserted successfully`);
       console.log(`  Indexed ${messages.length} messages for ${txtFile}`);
