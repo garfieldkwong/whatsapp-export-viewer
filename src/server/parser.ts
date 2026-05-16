@@ -54,15 +54,20 @@ function cleanText(text: string): string {
 // 2) M/D/YY, H:MM AM/PM - Sender: Message  (_chat.txt format)
 // 3) [M/D/YY, H:MM:SS AM/PM] Sender: Message (bracket format)
 // 4) [M/D/YYYY 下午/上午 H:MM:SS] Sender: Message (Chinese format)
+// 5) M/D/YY H:MM - Sender: Message (no am/pm)
 const MESSAGE_REGEXES = [
   // Format: 5/7/2022 6:56:06 pm - Sender: Message
   /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?)\s+-\s+(.*?)(?::\s*(.*))?$/i,
   // Format: 12/25/22, 10:00 AM - +1 234 567 8900: Message
   /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\s+-\s+(.*?)(?::\s*(.*))?$/i,
+  // Format: 12/25/22, 10:00 - +1 234 567 8900: Message (no am/pm)
+  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+(.*?)(?::\s*(.*))?$/i,
   // Format: [12/25/22, 10:00:00 AM] Sender: Message
   /^\[(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+(.*?)(?::\s*(.*))?$/i,
   // Format: [9/8/2024 下午11:02:13] Group with Riza: Message (Chinese WhatsApp format)
   /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
+  // Format: [9/8/2024, 下午11:02:13] Group with Riza: Message (Chinese format with comma)
+  /^\[(\d{1,2}\/\d{1,2}\/\d{4}),?\s+(上午|下午|am|pm)\s*(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
   // Format: [9/8/2024 下午11:02:13] Message (system message without colon)
   /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
 ];
@@ -114,17 +119,21 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     let isSystemMessage: boolean;
 
     // Handle different regex formats
-    if (matchedRegexIndex === 3) {
+    if (matchedRegexIndex === 4 || matchedRegexIndex === 5) {
       // Chinese format with colon: [9/8/2024 下午11:02:13] Sender: Message
+      // Index 4: [9/8/2024 下午11:02:13] Sender: Message
+      // Index 5: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
       [, date, , time, sender, text] = match;
       isSystemMessage = false;
-    } else if (matchedRegexIndex === 4) {
+    } else if (matchedRegexIndex === 6) {
       // Chinese format without colon: [9/8/2024 下午11:02:13] Message (system)
       [, date, , time, text] = match;
       sender = null;
       isSystemMessage = true;
     } else {
       // Original formats: date, time, senderOrSystem, message
+      // Indices 0-2: Hyphen format with 4-digit or 2-digit year
+      // Index 3: Bracket format with 2-digit year
       const [, d, t, senderOrSystem, message] = match;
       date = d;
       time = t;
@@ -143,11 +152,14 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     // - "filename.ext (附件檔案)"
     // - "filename.ext"
     // - "<attached: filename.ext>"
+    // - "<附件：filename.ext>" (Chinese format with fullwidth colon)
     // - "IMG-20240101-WA0001.jpg (file attached)"
     const mediaPatterns = [
       /([A-Za-z0-9_\-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
       /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)(?:>|⟩)/i,
+      /(?:<附件[：:]\s*|<Attachment[：:]\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)(?:>|⟩)/i,
       /(?:attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)/i,
+      /(?:附件[：:]\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)/i,
     ];
 
     for (const pattern of mediaPatterns) {
