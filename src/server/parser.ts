@@ -67,10 +67,28 @@ const MESSAGE_REGEXES = [
   /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
 ];
 
-function parseWhatsAppText(textContent: string, chatId: string): Message[] {
+function parseWhatsAppText(textContent: string, chatId: string, availableMediaFiles: string[] = []): Message[] {
   const lines = textContent.split(/\r?\n/);
   const messages: Message[] = [];
   let position = 0;
+
+  // Index media files for quick lookup by type
+  const mediaFilesByType: Record<MediaType, string[]> = {
+    image: [],
+    video: [],
+    audio: [],
+    document: [],
+    unknown: [],
+  };
+
+  // Track used media files to avoid duplicates
+  const usedMediaFiles = new Set<string>();
+
+  for (const file of availableMediaFiles) {
+    const type = getMediaType(file);
+    mediaFilesByType[type].push(file);
+    mediaFilesByType.unknown.push(file); // Also add to unknown for fallback
+  }
 
   for (const line of lines) {
     const cleanedLine = cleanText(line);
@@ -139,7 +157,48 @@ function parseWhatsAppText(textContent: string, chatId: string): Message[] {
         mediaType = getMediaType(mediaFilename);
         // Remove the filename and attachment indicator from the message
         cleanMessage = text.replace(pattern, '').trim() || '<Media omitted>';
+        usedMediaFiles.add(mediaFilename);
         break;
+      }
+    }
+
+    // If no media found in text but text looks like a media message, try to find a matching file
+    if (!mediaFilename && availableMediaFiles.length > 0) {
+      // Check for media indicators in Chinese and English
+      const mediaIndicators: { text: string[]; type: MediaType }[] = [
+        { text: ['照片', '图片', 'image', 'photo', 'picture', '📷'], type: 'image' },
+        { text: ['视频', 'video', '🎥'], type: 'video' },
+        { text: ['音频', '语音', 'audio', 'voice', '🎵'], type: 'audio' },
+        { text: ['文件', 'document', 'file', '📎'], type: 'document' },
+      ];
+
+      const lowerText = text.toLowerCase();
+      for (const indicator of mediaIndicators) {
+        if (indicator.text.some(indicatorText => lowerText.includes(indicatorText))) {
+          // Try to find an unused file matching the expected type
+          for (const file of mediaFilesByType[indicator.type]) {
+            if (!usedMediaFiles.has(file)) {
+              mediaFilename = file;
+              mediaType = getMediaType(file);
+              cleanMessage = '<Media omitted>';
+              usedMediaFiles.add(file);
+              break;
+            }
+          }
+          if (!mediaFilename && indicator.type !== 'document') {
+            // Fallback: try any unused file if no type match found
+            for (const file of mediaFilesByType.unknown) {
+              if (!usedMediaFiles.has(file)) {
+                mediaFilename = file;
+                mediaType = getMediaType(file);
+                cleanMessage = '<Media omitted>';
+                usedMediaFiles.add(file);
+                break;
+              }
+            }
+          }
+          if (mediaFilename) break;
+        }
       }
     }
 
@@ -166,9 +225,9 @@ function parseWhatsAppText(textContent: string, chatId: string): Message[] {
 }
 
 // Parse a standalone txt file
-export function parseTextFile(textFilePath: string, chatId: string): Message[] {
+export function parseTextFile(textFilePath: string, chatId: string, mediaFiles: string[] = []): Message[] {
   const textContent = readFileSync(textFilePath, 'utf-8');
-  return parseWhatsAppText(textContent, chatId);
+  return parseWhatsAppText(textContent, chatId, mediaFiles);
 }
 
 // Open a zip file using yauzl (streaming, supports files > 2 GiB)
@@ -264,7 +323,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
       }
 
       console.log(`[PARSER]   Parsing ${txtContent.length} bytes of text...`);
-      const messages = parseWhatsAppText(txtContent, chatId);
+      const messages = parseWhatsAppText(txtContent, chatId, mediaFiles);
       console.log(`[PARSER]   Parsed ${messages.length} messages`);
 
       resolve({
