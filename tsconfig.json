@@ -3,7 +3,7 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "node",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -17,6 +17,6 @@
     "allowSyntheticDefaultImports": true,
     "noEmit": false
   },
-  "include": ["src/**/*"],
+  "include": ["src/server/**/*"],
   "exclude": ["node_modules", "dist"]
 }

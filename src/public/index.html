@@ -4,45 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WhatsApp Export Viewer</title>
-  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="app">
-    <!-- Sidebar with chat list -->
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <h1>WhatsApp Export Viewer</h1>
-        <button id="reindexBtn" class="icon-btn" title="Reindex all chats">🔄</button>
-      </div>
-      <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search chats...">
-      </div>
-      <div id="chatList" class="chat-list">
-        <div class="loading">Loading chats...</div>
-      </div>
-    </aside>
-
-    <!-- Main chat view -->
-    <main class="chat-view" id="chatView">
-      <div class="empty-state">
-        <div class="empty-icon">💬</div>
-        <h2>Select a chat to view</h2>
-        <p>Choose from the list on the left</p>
-      </div>
-    </main>
-
-    <!-- Search results panel -->
-    <div id="searchPanel" class="search-panel hidden">
-      <div class="search-panel-header">
-        <button id="closeSearchBtn" class="close-btn">&times;</button>
-        <h3>Search Results</h3>
-        <input type="text" id="messageSearchInput" placeholder="Search messages...">
-        <button id="searchMessagesBtn">Search</button>
-      </div>
-      <div id="searchResults" class="search-results"></div>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
+  <div id="app"></div>
+  <script type="module" src="/main.ts"></script>
 </body>
 </html>

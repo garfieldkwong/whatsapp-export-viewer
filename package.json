@@ -7,11 +7,11 @@
   "scripts": {
     "build": "npm run build:server && npm run build:client",
     "build:server": "tsc",
-    "build:client": "esbuild src/public/app.ts --bundle --minify --outfile=dist/public/app.js --format=esm --target=es2020 --sourcemap && cp src/public/index.html dist/public/ && cp src/public/styles.css dist/public/",
+    "build:client": "vite build",
     "start": "node dist/server/index.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsc --watch",
-    "dev:client": "esbuild src/public/app.ts --bundle --outfile=dist/public/app.js --format=esm --target=es2020 --sourcemap --watch"
+    "dev:client": "vite"
   },
   "keywords": [
     "whatsapp",
@@ -25,6 +25,7 @@
     "better-sqlite3": "^11.7.0",
     "chokidar": "^4.0.1",
     "express": "^4.21.2",
+    "vue": "^3.5.34",
     "yauzl": "^3.3.0"
   },
   "devDependencies": {
@@ -34,9 +35,11 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/yauzl": "^2.10.3",
+    "@vitejs/plugin-vue": "^5.2.4",
     "concurrently": "^9.1.2",
     "esbuild": "^0.24.2",
     "nodemon": "^3.1.9",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "^6.4.2"
   }
 }

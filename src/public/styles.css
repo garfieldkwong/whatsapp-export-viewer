@@ -27,7 +27,7 @@ body {
   overflow: hidden;
 }
 
-.app {
+#app, .app {
   display: flex;
   height: 100vh;
 }
