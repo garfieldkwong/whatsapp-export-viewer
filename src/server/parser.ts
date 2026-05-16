@@ -194,7 +194,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
     let txtFile = '';
     let txtContent = '';
     const mediaFiles: string[] = [];
-    let pendingEntries = 0;
+    let pendingReads = 0;
     let entryCount = 0;
     let finished = false;
 
@@ -229,7 +229,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
 
     zipfile.on('entry', (entry: yauzl.Entry) => {
       entryCount++;
-      pendingEntries++;
 
       const entryName = basename(entry.fileName);
 
@@ -238,8 +237,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
       // Skip directories and hidden files
       if (/\/$/.test(entry.fileName) || entryName.startsWith('.')) {
         console.log(`[PARSER]     Skipping (directory or hidden)`);
-        pendingEntries--;
-        if (pendingEntries === 0) finish();
         return;
       }
 
@@ -247,31 +244,30 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
         // Read txt content into memory (small file)
         txtFile = entryName;
         console.log(`[PARSER]     Reading txt file: ${entryName}`);
+        pendingReads++;
         readEntryToString(zipfile, entry)
           .then(content => {
             txtContent = content;
             console.log(`[PARSER]     Read ${content.length} bytes from txt file`);
-            pendingEntries--;
-            if (pendingEntries === 0) finish();
+            pendingReads--;
+            if (pendingReads === 0) finish();
           })
           .catch(err => {
             console.error(`[PARSER]     Error reading txt:`, err);
-            pendingEntries--;
-            if (pendingEntries === 0) finish();
+            pendingReads--;
+            if (pendingReads === 0) finish();
           });
       } else {
         // Just track media files, don't extract yet
         mediaFiles.push(entryName);
         console.log(`[PARSER]     Tracking as media file`);
-        pendingEntries--;
-        if (pendingEntries === 0) finish();
       }
     });
 
     zipfile.on('end', () => {
-      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pending: ${pendingEntries}`);
-      // If no entries were found
-      if (pendingEntries === 0 && !finished) finish();
+      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pendingReads: ${pendingReads}`);
+      // All entries processed, finish if no async reads pending
+      if (pendingReads === 0 && !finished) finish();
     });
 
     zipfile.on('error', (err: Error) => {
@@ -283,7 +279,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
     // Add a timeout in case the zip file is malformed
     setTimeout(() => {
       if (!finished) {
-        console.error(`[PARSER]   TIMEOUT after 30 seconds. entries: ${entryCount}, pending: ${pendingEntries}`);
+        console.error(`[PARSER]   TIMEOUT after 30 seconds. entries: ${entryCount}, pendingReads: ${pendingReads}`);
         console.error(`[PARSER]   Forcing finish...`);
         finish();
       }
