@@ -208,8 +208,7 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
 
       if (!txtFile) {
         console.error(`[PARSER]   No txt file found in zip! Entries seen: ${entryCount}`);
-        zipfile.close();
-        reject(new Error('No .txt file found in zip archive'));
+        reject(new Error(`No .txt file found in zip archive: ${filename}`));
         return;
       }
 
@@ -217,7 +216,6 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
       const messages = parseWhatsAppText(txtContent, chatId);
       console.log(`[PARSER]   Parsed ${messages.length} messages`);
 
-      zipfile.close();
       resolve({
         chatId,
         extractDir,
@@ -271,9 +269,11 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
     });
 
     zipfile.on('error', (err: Error) => {
-      console.error(`[PARSER]   Zip error:`, err);
-      console.error(`[PARSER]   Error stack:`, err.stack);
-      reject(err);
+      if (!finished) {
+        console.error(`[PARSER]   Zip error for ${filename}:`, err);
+        console.error(`[PARSER]   Error stack:`, err.stack);
+        reject(new Error(`Zip error for ${filename}: ${err.message}`));
+      }
     });
 
     // Add a timeout in case the zip file is malformed
@@ -319,27 +319,19 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
       if (entryName === targetFilename) {
         found = true;
         extractEntry(zipfile, entry, destPath)
-          .then(() => {
-            zipfile.close();
-            resolve(destPath);
-          })
-          .catch(err => {
-            zipfile.close();
-            reject(err);
-          });
+          .then(() => resolve(destPath))
+          .catch(err => reject(err));
       }
     });
 
     zipfile.on('end', () => {
       if (!found) {
-        zipfile.close();
-        reject(new Error(`File "${targetFilename}" not found in zip`));
+        reject(new Error(`File "${targetFilename}" not found in zip: ${filename}`));
       }
     });
 
     zipfile.on('error', (err: Error) => {
-      zipfile.close();
-      reject(err);
+      reject(new Error(`Zip error extracting ${targetFilename} from ${filename}: ${err.message}`));
     });
   });
 }
