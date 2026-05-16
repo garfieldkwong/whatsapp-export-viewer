@@ -53,6 +53,7 @@ function cleanText(text: string): string {
 // 1) M/D/YYYY H:MM:SS am/pm - Sender: Message
 // 2) M/D/YY, H:MM AM/PM - Sender: Message  (_chat.txt format)
 // 3) [M/D/YY, H:MM:SS AM/PM] Sender: Message (bracket format)
+// 4) [M/D/YYYY 下午/上午 H:MM:SS] Sender: Message (Chinese format)
 const MESSAGE_REGEXES = [
   // Format: 5/7/2022 6:56:06 pm - Sender: Message
   /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?)\s+-\s+(.*?)(?::\s*(.*))?$/i,
@@ -60,6 +61,10 @@ const MESSAGE_REGEXES = [
   /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\s+-\s+(.*?)(?::\s*(.*))?$/i,
   // Format: [12/25/22, 10:00:00 AM] Sender: Message
   /^\[(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+(.*?)(?::\s*(.*))?$/i,
+  // Format: [9/8/2024 下午11:02:13] Group with Riza: Message (Chinese WhatsApp format)
+  /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
+  // Format: [9/8/2024 下午11:02:13] Message (system message without colon)
+  /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
 ];
 
 function parseWhatsAppText(textContent: string, chatId: string): Message[] {
@@ -72,18 +77,43 @@ function parseWhatsAppText(textContent: string, chatId: string): Message[] {
     if (!cleanedLine) continue;
 
     let match = null;
-    for (const regex of MESSAGE_REGEXES) {
-      match = cleanedLine.match(regex);
-      if (match) break;
+    let matchedRegexIndex = -1;
+
+    for (let i = 0; i < MESSAGE_REGEXES.length; i++) {
+      match = cleanedLine.match(MESSAGE_REGEXES[i]);
+      if (match) {
+        matchedRegexIndex = i;
+        break;
+      }
     }
 
     if (!match) continue;
 
-    const [, date, time, senderOrSystem, message] = match;
+    let date: string;
+    let time: string;
+    let sender: string | null;
+    let text: string;
+    let isSystemMessage: boolean;
 
-    const isSystemMessage = message === undefined;
-    const sender = isSystemMessage ? null : senderOrSystem;
-    const text = isSystemMessage ? senderOrSystem : (message || '');
+    // Handle different regex formats
+    if (matchedRegexIndex === 3) {
+      // Chinese format with colon: [9/8/2024 下午11:02:13] Sender: Message
+      [, date, , time, sender, text] = match;
+      isSystemMessage = false;
+    } else if (matchedRegexIndex === 4) {
+      // Chinese format without colon: [9/8/2024 下午11:02:13] Message (system)
+      [, date, , time, text] = match;
+      sender = null;
+      isSystemMessage = true;
+    } else {
+      // Original formats: date, time, senderOrSystem, message
+      const [, d, t, senderOrSystem, message] = match;
+      date = d;
+      time = t;
+      isSystemMessage = message === undefined;
+      sender = isSystemMessage ? null : senderOrSystem;
+      text = isSystemMessage ? senderOrSystem : (message || '');
+    }
 
     // Extract media information if present
     let mediaFilename: string | null = null;
@@ -96,6 +126,12 @@ function parseWhatsAppText(textContent: string, chatId: string): Message[] {
       mediaFilename = mediaMatch[1];
       mediaType = getMediaType(mediaFilename);
       cleanMessage = text.substring(0, mediaMatch.index).trim() || '<Media omitted>';
+    }
+
+    // Check for Chinese media omitted indicators
+    if (cleanMessage.endsWith('圖片已略去') || cleanMessage.endsWith('视频已略去') ||
+        cleanMessage.endsWith('音频已略去') || cleanMessage.endsWith('文件已略去')) {
+      cleanMessage = cleanMessage.replace(/(圖片|视频|音频|文件)已略去$/, '<Media omitted>');
     }
 
     messages.push({
