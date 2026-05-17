@@ -109,6 +109,18 @@ export class WhatsAppDatabase {
     }
   }
 
+  private rebuildFts(): void {
+    const count = (this.db.prepare('SELECT COUNT(*) as c FROM messages_fts').get() as { c: number }).c;
+    if (count === 0) {
+      const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }).c;
+      if (msgCount > 0) {
+        console.log(`[DB] Rebuilding FTS index for ${msgCount} messages...`);
+        this.db.exec('INSERT INTO messages_fts(rowid, text) SELECT id, text FROM messages');
+        console.log('[DB] FTS index rebuilt');
+      }
+    }
+  }
+
   private initSchema(): void {
     // Chats table - stores info about each zip file/chat
     this.db.exec(`
@@ -180,9 +192,9 @@ export class WhatsAppDatabase {
         VALUES (NEW.id, NEW.text);
       END;
     `);
-  }
 
-  // Insert or update a chat
+    this.rebuildFts();
+  }
   upsertChat(chat: ChatInput): Database.RunResult {
     const stmt = this.db.prepare(`
       INSERT INTO chats (id, filename, original_path, display_name, message_count,
