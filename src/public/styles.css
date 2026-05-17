@@ -24,23 +24,43 @@ body {
   background: var(--bg-darker);
   color: var(--text-primary);
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
 #app, .app {
   display: flex;
   height: 100vh;
+  height: 100dvh;
 }
 
 /* Sidebar */
 .sidebar {
-  width: 30%;
-  min-width: 300px;
-  max-width: 450px;
+  width: 350px;
+  min-width: 250px;
+  max-width: 600px;
+  flex-shrink: 0;
   background: var(--bg-dark);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.dragging {
+  background: var(--accent);
+  opacity: 0.5;
 }
 
 .sidebar-header {
@@ -136,6 +156,7 @@ body {
 /* Chat View */
 .chat-view {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-chat);

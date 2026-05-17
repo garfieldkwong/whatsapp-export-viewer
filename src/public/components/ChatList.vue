@@ -46,11 +46,45 @@ async function handleReindex() {
   }
 }
 
+const sidebar = ref<HTMLElement | null>(null);
+
+function onResizeMouseDown(e: MouseEvent) {
+  e.preventDefault();
+  const sidebarEl = sidebar.value;
+  if (!sidebarEl) return;
+  const startX = e.clientX;
+  const startWidth = sidebarEl.offsetWidth;
+  const handle = e.target as HTMLElement;
+  handle.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+
+  function onMouseMove(ev: MouseEvent) {
+    const newWidth = Math.min(600, Math.max(250, startWidth + ev.clientX - startX));
+    sidebarEl.style.width = `${newWidth}px`;
+  }
+
+  function onMouseUp() {
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+  }
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
 onMounted(loadChats);
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside ref="sidebar" class="sidebar">
+    <div
+      class="sidebar-resize-handle"
+      @mousedown="onResizeMouseDown"
+    />
     <div class="sidebar-header">
       <h1>WhatsApp Export Viewer</h1>
       <button

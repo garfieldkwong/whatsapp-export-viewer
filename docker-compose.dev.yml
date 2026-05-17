@@ -8,18 +8,23 @@ services:
     container_name: whatsapp-export-viewer
     ports:
       - "3000:3000"
+      # For HTTPS, expose on 443 instead:
+      # - "443:3000"
     volumes:
-      # Mount your WhatsApp export directory
       - ./whatsapp-exports:/app/whatsapp-exports
-      # Optional: Persist database
       - ./data:/app/data
+      # Mount SSL certificates (uncomment to enable HTTPS)
+      # - /path/to/ssl/cert.crt:/app/ssl/cert.crt:ro
+      # - /path/to/ssl/key.key:/app/ssl/key.key:ro
     environment:
       - PORT=3000
       - WHATSAPP_EXPORTS_DIR=/app/whatsapp-exports
       - TEMP_DIR=/app/.temp
       - DB_PATH=/app/data/whatsapp.db
-      # Uncomment to reindex on container start
       # - REINDEX_ON_STARTUP=true
+      # SSL (uncomment and set paths to enable HTTPS)
+      # - SSL_CERT_PATH=/app/ssl/cert.crt
+      # - SSL_KEY_PATH=/app/ssl/key.key
     restart: unless-stopped
 
 volumes:

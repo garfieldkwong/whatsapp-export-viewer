@@ -53,13 +53,13 @@ async function loadChat(chatId: string) {
     chat.value = chatData;
     messages.value = response.messages;
     hasMore.value = response.pagination.hasMore;
+    isLoading.value = false;
 
     await nextTick();
     setupObserver();
     scrollToBottom();
   } catch (err) {
     error.value = (err as Error).message;
-  } finally {
     isLoading.value = false;
   }
 }

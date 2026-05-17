@@ -4,10 +4,12 @@ import { WhatsAppDatabase, Chat } from './database.js';
 import { startWatcher } from './watcher.js';
 import { reindexAll, reindexChat } from './indexer.js';
 import { extractAndParseZip, cleanupExtraction, cleanupAllTemp } from './parser.js';
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import http from 'http';
+import https from 'https';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -217,12 +219,39 @@ async function start(): Promise<void> {
   // Start file watcher
   startWatcher(watchDir, db, tempDir);
 
-  // Start HTTP server
-  app.listen(CONFIG.PORT, () => {
-    console.log(`\n🚀 WhatsApp Export Viewer running at http://localhost:${CONFIG.PORT}`);
-    console.log(`📁 Watching: ${watchDir}`);
-    console.log(`💡 Place your WhatsApp .zip exports in: ${watchDir}\n`);
-  });
+  const useSSL = CONFIG.SSL_CERT_PATH && CONFIG.SSL_KEY_PATH;
+
+  if (useSSL) {
+    const certPath = CONFIG.SSL_CERT_PATH;
+    const keyPath = CONFIG.SSL_KEY_PATH;
+
+    if (!existsSync(certPath)) {
+      console.error(`SSL certificate not found at: ${certPath}`);
+      process.exit(1);
+    }
+    if (!existsSync(keyPath)) {
+      console.error(`SSL key not found at: ${keyPath}`);
+      process.exit(1);
+    }
+
+    const sslOptions = {
+      cert: readFileSync(certPath),
+      key: readFileSync(keyPath),
+    };
+
+    https.createServer(sslOptions, app).listen(CONFIG.PORT, () => {
+      console.log(`\n🚀 WhatsApp Export Viewer running at https://localhost:${CONFIG.PORT}`);
+      console.log(`🔒 SSL enabled (cert: ${certPath})`);
+      console.log(`📁 Watching: ${watchDir}`);
+      console.log(`💡 Place your WhatsApp .zip exports in: ${watchDir}\n`);
+    });
+  } else {
+    http.createServer(app).listen(CONFIG.PORT, () => {
+      console.log(`\n🚀 WhatsApp Export Viewer running at http://localhost:${CONFIG.PORT}`);
+      console.log(`📁 Watching: ${watchDir}`);
+      console.log(`💡 Place your WhatsApp .zip exports in: ${watchDir}\n`);
+    });
+  }
 }
 
 // Graceful shutdown

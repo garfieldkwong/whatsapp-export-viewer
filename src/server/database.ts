@@ -94,6 +94,21 @@ export class WhatsAppDatabase {
     this.initSchema();
   }
 
+  private migrateFts(): void {
+    const table = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'").get();
+    if (!table) return;
+
+    const info = this.db.pragma('table_info(messages_fts)') as { name: string }[];
+    const hasMessageId = info.some(col => col.name === 'message_id');
+    if (hasMessageId) {
+      console.log('[DB] Migrating FTS table: dropping stale messages_fts...');
+      this.db.exec('DROP TABLE IF EXISTS messages_fts');
+      this.db.exec('DROP TRIGGER IF EXISTS messages_ai');
+      this.db.exec('DROP TRIGGER IF EXISTS messages_ad');
+      this.db.exec('DROP TRIGGER IF EXISTS messages_au');
+    }
+  }
+
   private initSchema(): void {
     // Chats table - stores info about each zip file/chat
     this.db.exec(`
@@ -134,22 +149,23 @@ export class WhatsAppDatabase {
       CREATE INDEX IF NOT EXISTS idx_messages_chat_date ON messages(chat_id, date DESC);
     `);
 
+    // Fix legacy FTS table that had a stale message_id column
+    this.migrateFts();
+
     // Full-text search for message content
     this.db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
-        message_id,
         text,
         content='messages',
         content_rowid='id'
       );
     `);
 
-    // Triggers to keep FTS in sync
     this.db.exec(`
       CREATE TRIGGER IF NOT EXISTS messages_ai AFTER INSERT ON messages
       BEGIN
-        INSERT INTO messages_fts(rowid, message_id, text)
-        VALUES (NEW.id, NEW.id, NEW.text);
+        INSERT INTO messages_fts(rowid, text)
+        VALUES (NEW.id, NEW.text);
       END;
 
       CREATE TRIGGER IF NOT EXISTS messages_ad AFTER DELETE ON messages
@@ -160,8 +176,8 @@ export class WhatsAppDatabase {
       CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages
       BEGIN
         DELETE FROM messages_fts WHERE rowid = OLD.id;
-        INSERT INTO messages_fts(rowid, message_id, text)
-        VALUES (NEW.id, NEW.id, NEW.text);
+        INSERT INTO messages_fts(rowid, text)
+        VALUES (NEW.id, NEW.text);
       END;
     `);
   }
@@ -291,7 +307,7 @@ export class WhatsAppDatabase {
     let sql = `
       SELECT m.*, c.display_name as chatName, c.filename
       FROM messages_fts fts
-      JOIN messages m ON fts.message_id = m.id
+      JOIN messages m ON fts.rowid = m.id
       JOIN chats c ON m.chat_id = c.id
       WHERE messages_fts MATCH ?
     `;
