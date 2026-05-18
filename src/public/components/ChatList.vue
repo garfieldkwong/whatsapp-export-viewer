@@ -49,6 +49,7 @@ async function handleReindex() {
 const sidebar = ref<HTMLElement | null>(null);
 
 function onResizeMouseDown(e: MouseEvent) {
+  if (window.innerWidth < 768) return;
   e.preventDefault();
   const sidebarEl = sidebar.value;
   if (!sidebarEl) return;

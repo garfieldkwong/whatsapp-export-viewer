@@ -11,6 +11,10 @@ const props = defineProps<{
   chatId: string | null;
 }>();
 
+const emit = defineEmits<{
+  (e: 'back'): void;
+}>();
+
 const chat = ref<Chat | null>(null);
 const messages = ref<Message[]>([]);
 const hasMore = ref(true);
@@ -101,10 +105,8 @@ function scrollToBottom() {
 }
 
 async function scrollToMessage(messageId: number) {
-  // Check if message is already loaded
   let element = document.getElementById(`message-${messageId}`);
 
-  // If not found and there are more messages, keep loading
   if (!element && hasMore.value && props.chatId) {
     isFetchingMore.value = true;
     try {
@@ -125,7 +127,6 @@ async function scrollToMessage(messageId: number) {
         await nextTick();
         element = document.getElementById(`message-${messageId}`);
 
-        // Restore scroll position if message not found yet
         if (!element && container) {
           container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
         }
@@ -135,7 +136,6 @@ async function scrollToMessage(messageId: number) {
     }
   }
 
-  // Scroll to the message if found
   if (element && messagesContainer.value) {
     element.scrollIntoView({ behavior: 'smooth', block: 'center' });
     element.classList.add('highlight');
@@ -166,6 +166,7 @@ watch(
       <div v-else-if="error" class="error">Failed to load chat: {{ error }}</div>
       <template v-else-if="chat">
         <div class="chat-header">
+          <button class="back-btn icon-btn" @click="emit('back')" title="Back to chat list">←</button>
           <h2>{{ chat.displayName }}</h2>
           <button @click="showSearch = !showSearch" title="Search messages">🔍</button>
         </div>
