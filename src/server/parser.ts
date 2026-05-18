@@ -127,19 +127,19 @@ function parseDateTime(dateStr: string, timeStr: string): number {
 // 4) [M/D/YYYY 下午/上午 H:MM:SS] Sender: Message (Chinese format)
 // 5) M/D/YY H:MM - Sender: Message (no am/pm)
 const MESSAGE_REGEXES = [
-  // Format: 5/7/2022 6:56:06 pm - Sender: Message
-  /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?)\s+-\s+(.*?)(?::\s*(.*))?$/i,
+  // Format: 5/7/2022 6:56:06 pm - Sender: Message (must have colon for sender-message separation)
+  /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?)\s+-\s+([^:]+):\s*(.*)$/i,
   // Format: 12/25/22, 10:00 AM - +1 234 567 8900: Message
-  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\s+-\s+(.*?)(?::\s*(.*))?$/i,
+  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\s+-\s+([^:]+):\s*(.*)$/i,
   // Format: 12/25/22, 10:00 - +1 234 567 8900: Message (no am/pm)
-  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+(.*?)(?::\s*(.*))?$/i,
+  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+([^:]+):\s*(.*)$/i,
   // Format: [12/25/22, 10:00:00 AM] Sender: Message
-  /^\[(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+(.*?)(?::\s*(.*))?$/i,
+  /^\[(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+([^:]+):\s*(.*)$/i,
   // Format: [9/8/2024 下午11:02:13] Group with Riza: Message (Chinese WhatsApp format)
   /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
   // Format: [9/8/2024, 下午11:02:13] Group with Riza: Message (Chinese format with comma)
   /^\[(\d{1,2}\/\d{1,2}\/\d{4}),?\s+(上午|下午|am|pm)\s*(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
-  // Format: [9/8/2024 下午11:02:13] Message (system message without colon)
+  // Format: [9/8/2024 下午11:02:13] Message (system message without colon) - try to match any other bracketed format
   /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
 ];
 
@@ -196,27 +196,27 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     let isSystemMessage: boolean;
 
     // Handle different regex formats
-    if (matchedRegexIndex === 4 || matchedRegexIndex === 5) {
+    if (matchedRegexIndex === 5 || matchedRegexIndex === 6) {
       // Chinese format with colon: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 4: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 5: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
+      // Index 5: [9/8/2024 下午11:02:13] Sender: Message
+      // Index 6: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
       [, date, , time, sender, text] = match;
       isSystemMessage = false;
-    } else if (matchedRegexIndex === 6) {
+    } else if (matchedRegexIndex === 7) {
       // Chinese format without colon: [9/8/2024 下午11:02:13] Message (system)
       [, date, , time, text] = match;
       sender = null;
       isSystemMessage = true;
     } else {
-      // Original formats: date, time, senderOrSystem, message
-      // Indices 0-2: Hyphen format with 4-digit or 2-digit year
-      // Index 3: Bracket format with 2-digit year
-      const [, d, t, senderOrSystem, message] = match;
+      // Original formats: date, time, sender, message
+      // Indices 0-3: Hyphen format with 4-digit or 2-digit year
+      // Index 4: Bracket format with 2-digit year
+      const [, d, t, s, m] = match;
       date = d;
       time = t;
-      isSystemMessage = message === undefined;
-      sender = isSystemMessage ? null : senderOrSystem;
-      text = isSystemMessage ? senderOrSystem : (message || '');
+      sender = s?.trim() || null;
+      text = m || '';
+      isSystemMessage = !sender;
     }
 
     // Extract media information if present
