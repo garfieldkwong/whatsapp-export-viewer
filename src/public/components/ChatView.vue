@@ -57,7 +57,7 @@ async function loadChat(chatId: string) {
 
     await nextTick();
     setupObserver();
-    scrollToBottom();
+    scrollToTop();
   } catch (err) {
     error.value = (err as Error).message;
     isLoading.value = false;
@@ -75,16 +75,10 @@ async function loadMore() {
     hasMore.value = response.pagination.hasMore;
     if (response.messages.length === 0) return;
 
-    const container = messagesContainer.value;
-    const prevScrollHeight = container?.scrollHeight || 0;
-    const prevScrollTop = container?.scrollTop || 0;
-
-    messages.value = [...response.messages, ...messages.value];
+    // Append older messages to the end
+    messages.value = [...messages.value, ...response.messages];
 
     await nextTick();
-    if (container) {
-      container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
-    }
   } catch (err) {
     console.error('Error loading more messages:', err);
   } finally {
@@ -92,24 +86,49 @@ async function loadMore() {
   }
 }
 
-function scrollToBottom() {
+function scrollToTop() {
   nextTick(() => {
     if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+      messagesContainer.value.scrollTop = 0;
     }
   });
 }
 
-function scrollToMessage(messageId: number) {
-  showSearch.value = false;
-  nextTick(() => {
-    const element = document.getElementById(`message-${messageId}`);
-    if (element && messagesContainer.value) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('highlight');
-      setTimeout(() => element.classList.remove('highlight'), 2000);
+async function scrollToMessage(messageId: number) {
+  // Check if message is already loaded
+  let element = document.getElementById(`message-${messageId}`);
+
+  // If not found and there are more messages, keep loading
+  if (!element && hasMore.value && props.chatId) {
+    isFetchingMore.value = true;
+    try {
+      while (!element && hasMore.value) {
+        currentPage++;
+        const offset = currentPage * PAGE_SIZE;
+        const response = await fetchMessages(props.chatId, offset, PAGE_SIZE);
+        hasMore.value = response.pagination.hasMore;
+
+        if (response.messages.length === 0) break;
+
+        // Append older messages to the end
+        messages.value = [...messages.value, ...response.messages];
+
+        await nextTick();
+        element = document.getElementById(`message-${messageId}`);
+      }
+    } finally {
+      isFetchingMore.value = false;
     }
-  });
+  }
+
+  // Scroll to the message if found
+  if (element && messagesContainer.value) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    element.classList.add('highlight');
+    setTimeout(() => element.classList.remove('highlight'), 2000);
+  } else {
+    console.warn(`Message ${messageId} not found`);
+  }
 }
 
 watch(
@@ -137,7 +156,6 @@ watch(
           <button @click="showSearch = !showSearch" title="Search messages">🔍</button>
         </div>
         <div ref="messagesContainer" class="chat-messages">
-          <div ref="loadMoreTrigger" />
           <div v-if="messages.length === 0" class="empty-state">
             <p>No messages in this chat</p>
           </div>
@@ -147,6 +165,7 @@ watch(
             :message="msg"
             :chat-id="chatId"
           />
+          <div ref="loadMoreTrigger" />
         </div>
         <SearchPanel
           v-if="showSearch"
