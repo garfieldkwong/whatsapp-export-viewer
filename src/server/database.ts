@@ -316,7 +316,7 @@ export class WhatsAppDatabase {
              media_filename as mediaFilename, media_type as mediaType
       FROM messages
       WHERE chat_id = ?
-      ORDER BY datetime DESC
+      ORDER BY position DESC
       LIMIT ? OFFSET ?
     `);
     return stmt.all(chatId, limit, offset) as MessageOutput[];
