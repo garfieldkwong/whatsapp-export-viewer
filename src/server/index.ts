@@ -122,16 +122,23 @@ app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) =
       return res.status(404).json({ error: 'Chat not found' });
     }
 
-    const chatWithOriginalPath = chat as Chat & { originalPath: string };
-    console.log(`[MEDIA] originalPath:`, chatWithOriginalPath.originalPath);
+    if (!chat.originalPath) {
+      console.error(`[MEDIA] Chat has no originalPath`);
+      return res.status(500).json({ error: 'Chat has no source file path' });
+    }
+
+    if (!existsSync(chat.originalPath)) {
+      console.error(`[MEDIA] Source file not found: ${chat.originalPath}`);
+      return res.status(404).json({ error: 'Source zip file not found' });
+    }
 
     // Extract file from zip on-demand
     const { extractFileFromZip } = await import('./parser.js');
-    const mediaPath = await extractFileFromZip(chatWithOriginalPath.originalPath, filename, tempDir);
+    const mediaPath = await extractFileFromZip(chat.originalPath, filename, tempDir);
     console.log(`[MEDIA] Extracted to: ${mediaPath}`);
 
     if (!existsSync(mediaPath)) {
-      return res.status(404).json({ error: 'Media file not found' });
+      return res.status(404).json({ error: 'Media file not found after extraction' });
     }
 
     // Set appropriate content type based on file extension
@@ -152,10 +159,20 @@ app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) =
     };
 
     res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
-    res.sendFile(mediaPath);
+    res.setHeader('Content-Disposition', `inline; filename="${path.basename(mediaPath)}"`);
+    res.sendFile(mediaPath, (err) => {
+      if (err) {
+        console.error('[MEDIA] Error sending file:', err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Failed to send media file' });
+        }
+      }
+    });
   } catch (error) {
     console.error('Error serving media:', error);
-    res.status(500).json({ error: 'Failed to serve media' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to serve media', details: (error as Error).message });
+    }
   }
 });
 

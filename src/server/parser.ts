@@ -95,22 +95,28 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     mediaFilesByType.unknown.push(file); // Also add to unknown for fallback
   }
 
-  for (const line of lines) {
-    const cleanedLine = cleanText(line);
+  for (let i = 0; i < lines.length; i++) {
+    const cleanedLine = cleanText(lines[i]);
     if (!cleanedLine) continue;
 
     let match = null;
     let matchedRegexIndex = -1;
 
-    for (let i = 0; i < MESSAGE_REGEXES.length; i++) {
-      match = cleanedLine.match(MESSAGE_REGEXES[i]);
+    for (let j = 0; j < MESSAGE_REGEXES.length; j++) {
+      match = cleanedLine.match(MESSAGE_REGEXES[j]);
       if (match) {
-        matchedRegexIndex = i;
+        matchedRegexIndex = j;
         break;
       }
     }
 
-    if (!match) continue;
+    if (!match) {
+      // This line doesn't start a new message — append to the previous one
+      if (messages.length > 0) {
+        messages[messages.length - 1].text += '\n' + cleanedLine;
+      }
+      continue;
+    }
 
     let date: string;
     let time: string;
@@ -155,11 +161,11 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     // - "<附件：filename.ext>" (Chinese format with fullwidth colon)
     // - "IMG-20240101-WA0001.jpg (file attached)"
     const mediaPatterns = [
-      /([A-Za-z0-9_\-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
-      /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)(?:>|⟩)/i,
-      /(?:<附件[：:]\s*|<Attachment[：:]\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)(?:>|⟩)/i,
-      /(?:attached:\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)/i,
-      /(?:附件[：:]\s*)([A-Za-z0-9_\-\.]+\.[A-Za-z0-9_-]+)/i,
+      /([A-Za-z0-9_ \-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
+      /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
+      /(?:<附件[：:]\s*|<Attachment[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
+      /(?:attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
+      /(?:附件[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
     ];
 
     for (const pattern of mediaPatterns) {

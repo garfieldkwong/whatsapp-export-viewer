@@ -231,6 +231,16 @@ body {
   white-space: pre-wrap;
 }
 
+.message-link {
+  color: #53bdeb;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.message-link:hover {
+  text-decoration: underline;
+}
+
 .message-meta {
   font-size: 11px;
   color: var(--text-muted);
@@ -268,6 +278,48 @@ body {
 
 .message-media audio {
   width: 100%;
+}
+
+/* File attachment card */
+.file-attachment {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  max-width: 280px;
+}
+
+.file-attachment:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.file-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-action {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 /* Empty State */
@@ -386,6 +438,36 @@ body {
   font-size: 13px;
   color: var(--accent);
   margin-bottom: 4px;
+}
+
+.search-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.search-result-header .search-result-chat {
+  margin-bottom: 0;
+}
+
+.relevance-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.relevance-high {
+  background: #25d366;
+}
+
+.relevance-medium {
+  background: #f39c12;
+}
+
+.relevance-low {
+  background: #7c8a96;
 }
 
 .search-result-text {

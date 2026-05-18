@@ -72,6 +72,7 @@ export interface SearchResult {
   mediaType: MediaType | null;
   chatName: string | null;
   filename: string;
+  score: number;
 }
 
 export interface PaginationResult {
@@ -94,19 +95,24 @@ export class WhatsAppDatabase {
     this.initSchema();
   }
 
-  private migrateFts(): void {
+  private needsFtsRebuild(): boolean {
     const table = this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts'").get();
-    if (!table) return;
+    if (!table) return false;
 
     const info = this.db.pragma('table_info(messages_fts)') as { name: string }[];
-    const hasMessageId = info.some(col => col.name === 'message_id');
-    if (hasMessageId) {
-      console.log('[DB] Migrating FTS table: dropping stale messages_fts...');
-      this.db.exec('DROP TABLE IF EXISTS messages_fts');
-      this.db.exec('DROP TRIGGER IF EXISTS messages_ai');
-      this.db.exec('DROP TRIGGER IF EXISTS messages_ad');
-      this.db.exec('DROP TRIGGER IF EXISTS messages_au');
-    }
+    if (info.some(col => col.name === 'message_id')) return true;
+
+    return false;
+  }
+
+  private migrateFts(): void {
+    if (!this.needsFtsRebuild()) return;
+
+    console.log('[DB] Migrating FTS table: dropping stale messages_fts...');
+    this.db.exec('DROP TABLE IF EXISTS messages_fts');
+    this.db.exec('DROP TRIGGER IF EXISTS messages_ai');
+    this.db.exec('DROP TRIGGER IF EXISTS messages_ad');
+    this.db.exec('DROP TRIGGER IF EXISTS messages_au');
   }
 
   private rebuildFts(): void {
@@ -314,16 +320,70 @@ export class WhatsAppDatabase {
     return result?.count || 0;
   }
 
-  // Search messages
   searchMessages(query: string, chatId: string | null = null): SearchResult[] {
+    const ftsQuery = this.sanitizeFtsQuery(query);
+
+    let results: SearchResult[] = [];
+    if (ftsQuery) {
+      try {
+        results = this.ftsSearch(ftsQuery, chatId);
+      } catch {
+        results = [];
+      }
+    }
+
+    if (results.length === 0) {
+      results = this.likeSearch(query, chatId);
+    }
+
+    return results;
+  }
+
+  private sanitizeFtsQuery(query: string): string {
+    let sanitized = query
+      .replace(/["^{}()+:]/g, ' ')
+      .replace(/\b(AND|OR|NOT|NEAR)\b/gi, ' ')
+      .trim();
+
+    if (!sanitized) return '';
+
+    const words = sanitized.split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return '';
+
+    return words.map(w => w.length >= 2 ? `${w}*` : w).join(' ');
+  }
+
+  private ftsSearch(ftsQuery: string, chatId: string | null): SearchResult[] {
     let sql = `
-      SELECT m.*, c.display_name as chatName, c.filename
+      SELECT m.*, c.display_name as chatName, c.filename,
+             -bm25(messages_fts) as score
       FROM messages_fts fts
       JOIN messages m ON fts.rowid = m.id
       JOIN chats c ON m.chat_id = c.id
       WHERE messages_fts MATCH ?
     `;
-    const params: (string | null)[] = [query];
+    const params: (string | null)[] = [ftsQuery];
+
+    if (chatId) {
+      sql += ' AND m.chat_id = ?';
+      params.push(chatId);
+    }
+
+    sql += ' ORDER BY bm25(messages_fts) LIMIT 100';
+
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as SearchResult[];
+  }
+
+  private likeSearch(query: string, chatId: string | null): SearchResult[] {
+    const escaped = query.replace(/[%_\\]/g, '\\$&');
+    let sql = `
+      SELECT m.*, c.display_name as chatName, c.filename, 0 as score
+      FROM messages m
+      JOIN chats c ON m.chat_id = c.id
+      WHERE m.text LIKE ? ESCAPE '\\'
+    `;
+    const params: (string | null)[] = [`%${escaped}%`];
 
     if (chatId) {
       sql += ' AND m.chat_id = ?';

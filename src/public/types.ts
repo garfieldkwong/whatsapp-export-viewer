@@ -19,6 +19,7 @@ export interface Message {
   chat_id?: string;
   chatName?: string | null;
   filename?: string;
+  score?: number;
 }
 
 export interface PaginationResponse {

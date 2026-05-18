@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import type { Message } from '../types';
 import { getMediaUrl } from '../composables/api';
-import { escapeHtml } from '../composables/utils';
+import { escapeHtml, linkify } from '../composables/utils';
 
 const props = defineProps<{
   message: Message;
@@ -21,7 +21,7 @@ const mediaUrl = computed(() =>
   <div class="message" :class="{ system: message.isSystemMessage, incoming: isIncoming, outgoing: !isIncoming && !message.isSystemMessage }">
     <div class="message-bubble">
       <div v-if="!message.isSystemMessage && message.sender" class="message-sender" v-html="escapeHtml(message.sender)" />
-      <div class="message-text" v-html="escapeHtml(message.text)" />
+      <div class="message-text" v-html="linkify(message.text)" />
       <div v-if="message.mediaFilename" class="message-media">
         <img
           v-if="message.mediaType === 'image'"
@@ -32,7 +32,20 @@ const mediaUrl = computed(() =>
         />
         <video v-else-if="message.mediaType === 'video'" :src="mediaUrl" controls />
         <audio v-else-if="message.mediaType === 'audio'" :src="mediaUrl" controls />
-        <a v-else :href="mediaUrl" target="_blank" style="color: #00a884;">📎 <span v-html="escapeHtml(message.mediaFilename)" /></a>
+        <a v-else-if="message.mediaType === 'document'" :href="mediaUrl" target="_blank" class="file-attachment">
+          <span class="file-icon">📄</span>
+          <span class="file-info">
+            <span class="file-name" v-html="escapeHtml(message.mediaFilename)" />
+            <span class="file-action">Tap to view</span>
+          </span>
+        </a>
+        <a v-else :href="mediaUrl" target="_blank" download class="file-attachment">
+          <span class="file-icon">📄</span>
+          <span class="file-info">
+            <span class="file-name" v-html="escapeHtml(message.mediaFilename)" />
+            <span class="file-action">Tap to download</span>
+          </span>
+        </a>
       </div>
       <div class="message-meta">{{ message.date }} {{ message.time }}</div>
     </div>

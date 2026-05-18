@@ -35,5 +35,5 @@ export async function reindexAll(): Promise<void> {
 }
 
 export function getMediaUrl(chatId: string, filename: string): string {
-  return `${API_BASE}/media/${chatId}/${encodeURIComponent(filename)}`;
+  return `${API_BASE}/media/${encodeURIComponent(chatId)}/${encodeURIComponent(filename)}`;
 }

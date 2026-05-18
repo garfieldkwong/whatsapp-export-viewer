@@ -36,6 +36,13 @@ async function doSearch() {
 function handleKey(e: KeyboardEvent) {
   if (e.key === 'Enter') doSearch();
 }
+
+function relevanceClass(score: number | undefined): string {
+  if (!score) return 'relevance-low';
+  if (score > 2) return 'relevance-high';
+  if (score > 0.5) return 'relevance-medium';
+  return 'relevance-low';
+}
 </script>
 
 <template>
@@ -60,7 +67,10 @@ function handleKey(e: KeyboardEvent) {
         :key="result.id"
         class="search-result-item"
       >
-        <div class="search-result-chat" v-html="escapeHtml(result.chatName || result.filename || '')" />
+        <div class="search-result-header">
+          <span class="search-result-chat" v-html="escapeHtml(result.chatName || result.filename || '')" />
+          <span class="relevance-dot" :class="relevanceClass(result.score)" :title="'Relevance: ' + (result.score?.toFixed(2) || 'fallback')" />
+        </div>
         <div class="search-result-text" v-html="escapeHtml(result.text)" />
         <div class="search-result-meta">{{ result.date }} {{ result.time }}</div>
       </div>
