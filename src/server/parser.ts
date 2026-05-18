@@ -196,16 +196,20 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     let isSystemMessage: boolean;
 
     // Handle different regex formats
-    if (matchedRegexIndex === 5 || matchedRegexIndex === 6) {
+    if (matchedRegexIndex === 4 || matchedRegexIndex === 5) {
       // Chinese format with colon: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 5: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 6: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
-      [, date, , time, sender, text] = match;
+      // Index 4: [9/8/2024 下午11:02:13] Sender: Message
+      // Index 5: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
+      [, date, ampm, time, sender, text] = match;
+      // Combine am/pm with time for datetime parsing
+      time = `${ampm}${time}`;
       isSystemMessage = false;
-    } else if (matchedRegexIndex === 7) {
+    } else if (matchedRegexIndex === 6) {
       // Chinese format without colon: [9/8/2024 下午11:02:13] Message (system)
-      [, date, , time, text] = match;
+      [, date, ampm, time, text] = match;
       sender = null;
+      // Combine am/pm with time for datetime parsing
+      time = `${ampm}${time}`;
       isSystemMessage = true;
     } else {
       // Original formats: date, time, sender, message
