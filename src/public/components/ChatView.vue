@@ -51,7 +51,7 @@ async function loadChat(chatId: string) {
       fetchMessages(chatId, 0, PAGE_SIZE),
     ]);
     chat.value = chatData;
-    messages.value = response.messages;
+    messages.value = [...response.messages].reverse();
     hasMore.value = response.pagination.hasMore;
     isLoading.value = false;
 
@@ -79,7 +79,7 @@ async function loadMore() {
     const prevScrollHeight = container?.scrollHeight || 0;
     const prevScrollTop = container?.scrollTop || 0;
 
-    messages.value = [...response.messages, ...messages.value];
+    messages.value = [...response.messages].reverse().concat(messages.value);
 
     await nextTick();
     if (container) {
@@ -120,7 +120,7 @@ async function scrollToMessage(messageId: number) {
         const prevScrollHeight = container?.scrollHeight || 0;
         const prevScrollTop = container?.scrollTop || 0;
 
-        messages.value = [...response.messages, ...messages.value];
+        messages.value = [...response.messages].reverse().concat(messages.value);
 
         await nextTick();
         element = document.getElementById(`message-${messageId}`);
