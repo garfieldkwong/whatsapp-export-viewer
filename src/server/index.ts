@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import http from 'http';
 import https from 'https';
+import logger from './logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -43,7 +44,7 @@ app.get('/api/chats', (req: Request, res: Response) => {
     const chats = db.getAllChats();
     res.json(chats);
   } catch (error) {
-    console.error('Error fetching chats:', error);
+    logger.error({ error }, 'Failed to fetch chats');
     res.status(500).json({ error: 'Failed to fetch chats' });
   }
 });
@@ -57,7 +58,7 @@ app.get('/api/chats/:id', (req: Request, res: Response) => {
     }
     res.json(chat);
   } catch (error) {
-    console.error('Error fetching chat:', error);
+    logger.error({ error, chatId: req.params.id }, 'Failed to fetch chat');
     res.status(500).json({ error: 'Failed to fetch chat' });
   }
 });
@@ -82,7 +83,7 @@ app.get('/api/chats/:id/messages', (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching messages:', error);
+    logger.error({ error, chatId: req.params.id }, 'Failed to fetch messages');
     res.status(500).json({ error: 'Failed to fetch messages' });
   }
 });
@@ -100,48 +101,47 @@ app.get('/api/search', (req: Request, res: Response) => {
     const results = db.searchMessages(query, chatId);
     res.json({ query, results });
   } catch (error) {
-    console.error('Error searching messages:', error);
+    logger.error({ error, query: req.query.q }, 'Failed to search messages');
     res.status(500).json({ error: 'Failed to search messages' });
   }
 });
 
 // Serve media files
 app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) => {
+  const { chatId, filename } = req.params as { chatId: string; filename: string };
+
   try {
-    const { chatId, filename } = req.params as { chatId: string; filename: string };
-    console.log(`[MEDIA] Request: chatId=${chatId}, filename=${filename}`);
+    logger.debug({ chatId, filename }, 'Media request');
 
     if (!filename) {
       return res.status(400).json({ error: 'Filename is required' });
     }
 
     const chat = db.getChat(chatId);
-    console.log(`[MEDIA] Chat found:`, chat ? 'yes' : 'no');
+    logger.debug({ chatId, found: !!chat }, 'Chat lookup');
 
     if (!chat) {
       return res.status(404).json({ error: 'Chat not found' });
     }
 
     if (!chat.originalPath) {
-      console.error(`[MEDIA] Chat has no originalPath`);
+      logger.error({ chatId }, 'Chat has no originalPath');
       return res.status(500).json({ error: 'Chat has no source file path' });
     }
 
     if (!existsSync(chat.originalPath)) {
-      console.error(`[MEDIA] Source file not found: ${chat.originalPath}`);
+      logger.error({ chatId, originalPath: chat.originalPath }, 'Source zip file not found');
       return res.status(404).json({ error: 'Source zip file not found' });
     }
 
-    // Extract file from zip on-demand
     const { extractFileFromZip } = await import('./parser.js');
     const mediaPath = await extractFileFromZip(chat.originalPath, filename, tempDir);
-    console.log(`[MEDIA] Extracted to: ${mediaPath}`);
+    logger.debug({ chatId, filename, mediaPath }, 'Extracted media file');
 
     if (!existsSync(mediaPath)) {
       return res.status(404).json({ error: 'Media file not found after extraction' });
     }
 
-    // Set appropriate content type based on file extension
     const ext = path.extname(filename).toLowerCase();
     const contentTypes: Record<string, string> = {
       '.jpg': 'image/jpeg',
@@ -162,14 +162,14 @@ app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) =
     res.setHeader('Content-Disposition', `inline; filename="${path.basename(mediaPath)}"`);
     res.sendFile(mediaPath, (err) => {
       if (err) {
-        console.error('[MEDIA] Error sending file:', err);
+        logger.error({ err, chatId, filename }, 'Error sending media file');
         if (!res.headersSent) {
           res.status(500).json({ error: 'Failed to send media file' });
         }
       }
     });
   } catch (error) {
-    console.error('Error serving media:', error);
+    logger.error({ error, chatId, filename }, 'Error serving media');
     if (!res.headersSent) {
       res.status(500).json({ error: 'Failed to serve media', details: (error as Error).message });
     }
@@ -182,7 +182,7 @@ app.post('/api/chats/:id/reindex', async (req: Request, res: Response) => {
     await reindexChat(req.params.id as string, db, tempDir);
     res.json({ status: 'ok' });
   } catch (error) {
-    console.error('Error reindexing chat:', error);
+    logger.error({ error, chatId: req.params.id }, 'Failed to reindex chat');
     res.status(500).json({ error: 'Failed to reindex chat' });
   }
 });
@@ -193,7 +193,7 @@ app.post('/api/reindex', async (req: Request, res: Response) => {
     await reindexAll(watchDir, db, tempDir);
     res.json({ status: 'ok' });
   } catch (error) {
-    console.error('Error reindexing:', error);
+    logger.error({ error }, 'Failed to reindex all');
     res.status(500).json({ error: 'Failed to reindex' });
   }
 });
@@ -202,13 +202,16 @@ app.post('/api/reindex', async (req: Request, res: Response) => {
 function logMemory(label: string): void {
   const usage = process.memoryUsage();
   const mb = (v: number) => Math.round(v / 1024 / 1024);
-  console.log(`[MEMORY] ${label}: RSS=${mb(usage.rss)}MB heap=${mb(usage.heapUsed)}/${mb(usage.heapTotal)}MB external=${mb(usage.external)}MB`);
+  logger.info(
+    { label, rss: mb(usage.rss), heapUsed: mb(usage.heapUsed), heapTotal: mb(usage.heapTotal), external: mb(usage.external) },
+    'Memory usage'
+  );
 }
 
 // Start server
 async function start(): Promise<void> {
   // Clean temp directory on startup
-  console.log('Cleaning temp directory...');
+  logger.info({ tempDir }, 'Cleaning temp directory');
   cleanupAllTemp(tempDir);
 
   // Force garbage collection if available (node --gc)
@@ -220,17 +223,16 @@ async function start(): Promise<void> {
 
   // Index existing files if configured
   if (CONFIG.REINDEX_ON_STARTUP) {
-    console.log('Reindexing existing files...');
+    logger.info('Reindexing existing files on startup');
     try {
       await reindexAll(watchDir, db, tempDir);
       if (global.gc) global.gc();
       logMemory('After reindex');
     } catch (error) {
-      console.error('Error during reindex:', error);
-      console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
+      logger.error({ error, stack: error instanceof Error ? error.stack : 'No stack' }, 'Error during reindex');
     }
   } else {
-    console.log('Skipping reindex on startup (set REINDEX_ON_STARTUP=true to enable)');
+    logger.info('Skipping reindex on startup (set REINDEX_ON_STARTUP=true to enable)');
   }
 
   // Start file watcher
@@ -243,11 +245,11 @@ async function start(): Promise<void> {
     const keyPath = CONFIG.SSL_KEY_PATH;
 
     if (!existsSync(certPath)) {
-      console.error(`SSL certificate not found at: ${certPath}`);
+      logger.error({ certPath }, 'SSL certificate not found');
       process.exit(1);
     }
     if (!existsSync(keyPath)) {
-      console.error(`SSL key not found at: ${keyPath}`);
+      logger.error({ keyPath }, 'SSL key not found');
       process.exit(1);
     }
 
@@ -257,29 +259,24 @@ async function start(): Promise<void> {
     };
 
     https.createServer(sslOptions, app).listen(CONFIG.PORT, () => {
-      console.log(`\n🚀 WhatsApp Export Viewer running at https://localhost:${CONFIG.PORT}`);
-      console.log(`🔒 SSL enabled (cert: ${certPath})`);
-      console.log(`📁 Watching: ${watchDir}`);
-      console.log(`💡 Place your WhatsApp .zip exports in: ${watchDir}\n`);
+      logger.info({ port: CONFIG.PORT, certPath, watchDir }, 'HTTPS server started');
     });
   } else {
     http.createServer(app).listen(CONFIG.PORT, () => {
-      console.log(`\n🚀 WhatsApp Export Viewer running at http://localhost:${CONFIG.PORT}`);
-      console.log(`📁 Watching: ${watchDir}`);
-      console.log(`💡 Place your WhatsApp .zip exports in: ${watchDir}\n`);
+      logger.info({ port: CONFIG.PORT, watchDir }, 'HTTP server started');
     });
   }
 }
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('\nShutting down gracefully...');
+  logger.info('Shutting down gracefully');
   db.close();
   cleanupAllTemp(tempDir);
   process.exit(0);
 });
 
 start().catch((error) => {
-  console.error('Failed to start server:', error);
+  logger.fatal({ error }, 'Failed to start server');
   process.exit(1);
 });

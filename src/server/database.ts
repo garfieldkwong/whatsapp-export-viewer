@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { CONFIG } from './config.js';
 import { MediaType } from './parser.js';
+import logger from './logger.js';
 
 export type Message = {
   chatId: string;
@@ -108,7 +109,7 @@ export class WhatsAppDatabase {
   private migrateFts(): void {
     if (!this.needsFtsRebuild()) return;
 
-    console.log('[DB] Migrating FTS table: dropping stale messages_fts...');
+    logger.info('Migrating FTS table: dropping stale messages_fts');
     this.db.exec('DROP TABLE IF EXISTS messages_fts');
     this.db.exec('DROP TRIGGER IF EXISTS messages_ai');
     this.db.exec('DROP TRIGGER IF EXISTS messages_ad');
@@ -120,9 +121,9 @@ export class WhatsAppDatabase {
     if (count === 0) {
       const msgCount = (this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as { c: number }).c;
       if (msgCount > 0) {
-        console.log(`[DB] Rebuilding FTS index for ${msgCount} messages...`);
+        logger.info({ messageCount: msgCount }, 'Rebuilding FTS index');
         this.db.exec('INSERT INTO messages_fts(rowid, text) SELECT id, text FROM messages');
-        console.log('[DB] FTS index rebuilt');
+        logger.info('FTS index rebuilt');
       }
     }
   }
@@ -226,10 +227,8 @@ export class WhatsAppDatabase {
     );
   }
 
-  // Insert messages in batch for performance
-  // Process in chunks to avoid OOM on large chats
   insertMessages(messages: MessageInput[]): void {
-    console.log(`[DB] insertMessages: ${messages.length} messages`);
+    logger.debug({ messageCount: messages.length }, 'Inserting messages');
     const insert = this.db.prepare(`
       INSERT INTO messages (chat_id, position, date, time, sender, text,
                            is_system_message, media_filename, media_type)
@@ -241,7 +240,7 @@ export class WhatsAppDatabase {
     for (let i = 0; i < messages.length; i += CHUNK_SIZE) {
       const chunkNum = Math.floor(i / CHUNK_SIZE) + 1;
       const chunk = messages.slice(i, i + CHUNK_SIZE);
-      console.log(`[DB] Processing chunk ${chunkNum}/${totalChunks} (${chunk.length} messages)...`);
+      logger.debug({ chunkNum, totalChunks, chunkLength: chunk.length }, 'Processing message chunk');
 
       const insertMany = this.db.transaction((msgs: MessageInput[]) => {
         for (const msg of msgs) {
@@ -259,9 +258,8 @@ export class WhatsAppDatabase {
         }
       });
       insertMany(chunk);
-      console.log(`[DB] Chunk ${chunkNum}/${totalChunks} done`);
     }
-    console.log(`[DB] insertMessages complete`);
+    logger.debug({ messageCount: messages.length }, 'Messages inserted');
   }
 
   // Delete all messages for a chat

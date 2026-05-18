@@ -2,12 +2,13 @@ import { watch, FSWatcher } from 'chokidar';
 import { join, basename } from 'path';
 import { indexZip, reindexChat, createChatId } from './indexer.js';
 import { WhatsAppDatabase } from './database.js';
+import logger from './logger.js';
 
 // Track in-flight operations to avoid duplicate processing
 const processing = new Set<string>();
 
 export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: string): FSWatcher {
-  console.log(`Starting file watcher on: ${directory}`);
+  logger.info({ directory }, 'Starting file watcher');
 
   const watcher = watch(directory, {
     ignored: /(^|[\/\\])\../, // ignore dotfiles
@@ -30,7 +31,7 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     filenameToChatId.set(filename, chatId);
 
     if (processing.has(chatId)) {
-      console.log(`Skipping ${filename}: already processing`);
+      logger.debug({ filename, chatId }, 'Skipping file: already processing');
       return;
     }
 
@@ -39,7 +40,7 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     try {
       await indexZip(filePath, db, tempDir);
     } catch (error) {
-      console.error(`Failed to index ${filename}:`, error);
+      logger.error({ error, filename, chatId }, 'Failed to index file');
     } finally {
       processing.delete(chatId);
     }
@@ -58,10 +59,10 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     processing.add(chatId);
 
     try {
-      console.log(`Zip file changed: ${filename}, re-indexing...`);
+      logger.info({ filename, chatId }, 'Zip file changed, re-indexing');
       await reindexChat(chatId, db, tempDir);
     } catch (error) {
-      console.error(`Failed to re-index ${filename}:`, error);
+      logger.error({ error, filename, chatId }, 'Failed to re-index file');
     } finally {
       processing.delete(chatId);
     }
@@ -74,20 +75,20 @@ export function startWatcher(directory: string, db: WhatsAppDatabase, tempDir: s
     const filename = basename(filePath);
     const chatId = filenameToChatId.get(filename);
 
-    console.log(`File deleted: ${filename}`);
+    logger.info({ filename, chatId: chatId || 'unknown' }, 'File deleted');
 
     if (!chatId) {
-      console.warn(`No chat ID found for ${filename}, skipping database delete`);
+      logger.warn({ filename }, 'No chat ID found, skipping database delete');
       filenameToChatId.delete(filename);
       return;
     }
 
     try {
       db.deleteChat(chatId);
-      console.log(`Removed chat ${chatId} from database`);
+      logger.info({ chatId, filename }, 'Removed chat from database');
       filenameToChatId.delete(filename);
     } catch (error) {
-      console.error(`Failed to delete chat ${chatId}:`, error);
+      logger.error({ error, chatId, filename }, 'Failed to delete chat');
     }
   });
 

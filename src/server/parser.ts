@@ -2,6 +2,7 @@ import yauzl from 'yauzl';
 import { mkdirSync, rmSync, existsSync, createReadStream, createWriteStream, readdirSync, readFileSync } from 'fs';
 import { join, basename } from 'path';
 import { Message } from './database.js';
+import logger from './logger.js';
 
 export type MediaType = 'image' | 'video' | 'audio' | 'document' | 'unknown';
 
@@ -251,16 +252,13 @@ export function parseTextFile(textFilePath: string, chatId: string, mediaFiles: 
 // Open a zip file using yauzl (streaming, supports files > 2 GiB)
 function openZip(zipPath: string): Promise<yauzl.ZipFile> {
   return new Promise((resolve, reject) => {
-    console.log(`[PARSER] openZip: ${zipPath}`);
+    logger.debug({ zipPath }, 'Opening zip file');
     yauzl.open(zipPath, { lazyEntries: false }, (err, zipfile) => {
       if (err) {
-        console.error(`[PARSER] openZip error:`, err);
+        logger.error({ error: err, zipPath }, 'Failed to open zip');
         reject(err);
       } else {
-        console.log(`[PARSER] openZip success, zipfile:`, zipfile ? 'yes' : 'no');
-        if (zipfile) {
-          console.log(`[PARSER]   entryCount: ${zipfile.entryCount}`);
-        }
+        logger.debug({ zipPath, entryCount: zipfile?.entryCount }, 'Zip opened successfully');
         resolve(zipfile);
       }
     });
@@ -301,22 +299,17 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
   const chatId = baseName;
   const extractDir = join(tempDir, chatId);
 
-  console.log(`[PARSER] extractAndParseZip: ${filename}`);
-  console.log(`[PARSER]   zipPath: ${zipPath}`);
-  console.log(`[PARSER]   tempDir: ${tempDir}`);
-  console.log(`[PARSER]   extractDir: ${extractDir}`);
+  logger.debug({ filename, zipPath, tempDir, extractDir }, 'Extracting and parsing zip');
 
-  // Clean up existing extraction if present
   if (existsSync(extractDir)) {
-    console.log(`[PARSER]   Cleaning existing extraction dir...`);
+    logger.debug({ extractDir }, 'Cleaning existing extraction dir');
     rmSync(extractDir, { recursive: true, force: true });
   }
   mkdirSync(extractDir, { recursive: true });
 
-  console.log(`[PARSER]   Opening zip file...`);
+  logger.debug({ filename }, 'Opening zip file');
   const zipfile = await openZip(zipPath);
-  console.log(`[PARSER]   Zip opened, reading entries...`);
-  console.log(`[PARSER]   zipfile object:`, { entryCount: zipfile.entryCount });
+  logger.debug({ entryCount: zipfile.entryCount }, 'Reading zip entries');
 
   return new Promise((resolve, reject) => {
     let txtFile = '';
@@ -328,21 +321,21 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
 
     const finish = () => {
       if (finished) {
-        console.log(`[PARSER]   Finish called multiple times, skipping`);
+        logger.debug({ filename }, 'Finish called multiple times, skipping');
         return;
       }
       finished = true;
-      console.log(`[PARSER]   Finish called. txtFile: ${txtFile}, txtContent length: ${txtContent.length}, mediaFiles: ${mediaFiles.length}`);
+      logger.debug({ filename, txtFile, txtContentLength: txtContent.length, mediaFileCount: mediaFiles.length }, 'Finish called');
 
       if (!txtFile) {
-        console.error(`[PARSER]   No txt file found in zip! Entries seen: ${entryCount}`);
+        logger.error({ filename, entryCount }, 'No txt file found in zip');
         reject(new Error(`No .txt file found in zip archive: ${filename}`));
         return;
       }
 
-      console.log(`[PARSER]   Parsing ${txtContent.length} bytes of text...`);
+      logger.debug({ filename, txtContentLength: txtContent.length }, 'Parsing text content');
       const messages = parseWhatsAppText(txtContent, chatId, mediaFiles);
-      console.log(`[PARSER]   Parsed ${messages.length} messages`);
+      logger.debug({ filename, messageCount: messages.length }, 'Parsed messages');
 
       resolve({
         chatId,
@@ -358,57 +351,50 @@ export async function extractAndParseZip(zipPath: string, tempDir: string): Prom
 
       const entryName = basename(entry.fileName);
 
-      console.log(`[PARSER]   Entry ${entryCount}: ${entry.fileName} (basename: ${entryName})`);
+      logger.trace({ filename, entryCount, entryName, entryFileName: entry.fileName }, 'Processing zip entry');
 
-      // Skip directories and hidden files
       if (/\/$/.test(entry.fileName) || entryName.startsWith('.')) {
-        console.log(`[PARSER]     Skipping (directory or hidden)`);
+        logger.trace({ filename, entryName }, 'Skipping entry (directory or hidden)');
         return;
       }
 
       if (entryName.endsWith('.txt')) {
-        // Read txt content into memory (small file)
         txtFile = entryName;
-        console.log(`[PARSER]     Reading txt file: ${entryName}`);
+        logger.debug({ filename, entryName }, 'Reading txt file');
         pendingReads++;
         readEntryToString(zipfile, entry)
           .then(content => {
             txtContent = content;
-            console.log(`[PARSER]     Read ${content.length} bytes from txt file`);
+            logger.debug({ filename, entryName, contentLength: content.length }, 'Read txt file');
             pendingReads--;
             if (pendingReads === 0) finish();
           })
           .catch(err => {
-            console.error(`[PARSER]     Error reading txt:`, err);
+            logger.error({ error: err, filename, entryName }, 'Error reading txt');
             pendingReads--;
             if (pendingReads === 0) finish();
           });
       } else {
-        // Just track media files, don't extract yet
         mediaFiles.push(entryName);
-        console.log(`[PARSER]     Tracking as media file`);
+        logger.trace({ filename, entryName }, 'Tracking as media file');
       }
     });
 
     zipfile.on('end', () => {
-      console.log(`[PARSER]   Zip entry end event. Total entries seen: ${entryCount}, pendingReads: ${pendingReads}`);
-      // All entries processed, finish if no async reads pending
+      logger.debug({ filename, entryCount, pendingReads }, 'Zip entry end event');
       if (pendingReads === 0 && !finished) finish();
     });
 
     zipfile.on('error', (err: Error) => {
       if (!finished) {
-        console.error(`[PARSER]   Zip error for ${filename}:`, err);
-        console.error(`[PARSER]   Error stack:`, err.stack);
+        logger.error({ error: err, filename, stack: err.stack }, 'Zip error');
         reject(new Error(`Zip error for ${filename}: ${err.message}`));
       }
     });
 
-    // Add a timeout in case the zip file is malformed
     setTimeout(() => {
       if (!finished) {
-        console.error(`[PARSER]   TIMEOUT after 30 seconds. entries: ${entryCount}, pendingReads: ${pendingReads}`);
-        console.error(`[PARSER]   Forcing finish...`);
+        logger.error({ filename, entryCount, pendingReads }, 'Zip parsing timeout after 30s');
         finish();
       }
     }, 30000);
@@ -434,7 +420,7 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
     return destPath;
   }
 
-  console.log(`[EXTRACT] Extracting ${targetFilename} from ${zipPath}`);
+  logger.debug({ targetFilename, zipPath, destPath }, 'Extracting file from zip');
   const zipfile = await openZip(zipPath);
 
   return new Promise((resolve, reject) => {
@@ -442,7 +428,7 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
 
     zipfile.on('entry', (entry: yauzl.Entry) => {
       const entryName = basename(entry.fileName);
-      console.log(`[EXTRACT] Checking entry: ${entryName} vs ${targetFilename}`);
+      logger.trace({ targetFilename, entryName }, 'Checking zip entry');
 
       if (entryName === targetFilename) {
         found = true;
@@ -454,11 +440,13 @@ export async function extractFileFromZip(zipPath: string, targetFilename: string
 
     zipfile.on('end', () => {
       if (!found) {
+        logger.error({ targetFilename, filename }, 'File not found in zip');
         reject(new Error(`File "${targetFilename}" not found in zip: ${filename}`));
       }
     });
 
     zipfile.on('error', (err: Error) => {
+      logger.error({ error: err, targetFilename, filename }, 'Zip error extracting file');
       reject(new Error(`Zip error extracting ${targetFilename} from ${filename}: ${err.message}`));
     });
   });

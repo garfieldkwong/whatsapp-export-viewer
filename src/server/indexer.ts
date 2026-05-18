@@ -3,6 +3,7 @@ import { join, basename, dirname } from 'path';
 import { WhatsAppDatabase } from './database.js';
 import { readdirSync, statSync, rmSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
+import logger from './logger.js';
 
 // Generate display name from filename
 function getDisplayName(filename: string): string {
@@ -47,7 +48,7 @@ async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: st
     const messages = parseTextFile(txtFilePath, chatId);
 
     if (messages.length === 0) {
-      console.log(`  No messages found in ${txtFile}`);
+      logger.debug({ txtFile }, 'No messages found');
       continue;
     }
 
@@ -69,7 +70,7 @@ async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: st
     db.upsertChat(chat);
     db.insertMessages(messages);
 
-    console.log(`  Indexed ${messages.length} messages for ${txtFile}`);
+    logger.info({ txtFile, messageCount: messages.length }, 'Indexed messages');
   }
 }
 
@@ -78,18 +79,16 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
   const filename = basename(zipPath);
   const isZip = zipPath.endsWith('.zip');
 
-  console.log(`[DEBUG] Starting to index: ${filename}`);
-  console.log(`[DEBUG] Is zip: ${isZip}`);
-  console.log(`[DEBUG] Temp dir: ${tempDir}`);
+  logger.debug({ filename, isZip, tempDir }, 'Starting to index');
 
   if (isZip) {
     try {
-      console.log(`[DEBUG] Calling extractAndParseZip for ${filename}...`);
+      logger.debug({ filename }, 'Calling extractAndParseZip');
       const { chatId, extractDir, txtFile, messages, mediaFiles } = await extractAndParseZip(zipPath, tempDir);
-      console.log(`[DEBUG] Extracted: chatId=${chatId}, txtFile=${txtFile}, messages=${messages.length}, mediaFiles=${mediaFiles.length}`);
+      logger.debug({ filename, chatId, txtFile, messageCount: messages.length, mediaFileCount: mediaFiles.length }, 'Extracted');
 
       if (messages.length === 0) {
-        console.log(`  No messages found in ${txtFile}`);
+        logger.info({ txtFile }, 'No messages found');
         return;
       }
 
@@ -108,21 +107,18 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
         isZip: true,
       };
 
-      console.log(`[DEBUG] Upserting chat ${chatId}...`);
+      logger.debug({ chatId }, 'Upserting chat');
       db.upsertChat(chat);
-      console.log(`[DEBUG] Chat upserted, deleting old messages and inserting ${messages.length} messages...`);
-      // Delete old messages first to prevent duplicates
+      logger.debug({ chatId, messageCount: messages.length }, 'Deleting old messages and inserting new');
       db.deleteMessages(chatId);
       db.insertMessages(messages);
-      console.log(`[DEBUG] Messages inserted successfully`);
-      console.log(`  Indexed ${messages.length} messages for ${txtFile}`);
-
-      if (mediaFiles.length > 0) {
-        console.log(`  ${mediaFiles.length} media files available`);
-      }
+      logger.debug({ chatId }, 'Messages inserted successfully');
+      logger.info({ txtFile, messageCount: messages.length, mediaFileCount: mediaFiles.length }, 'Indexed zip file');
     } catch (error) {
-      console.error(`  Error indexing ${filename}:`, error instanceof Error ? error.message : String(error));
-      console.error(`[DEBUG] Stack:`, error instanceof Error ? error.stack : 'No stack');
+      logger.error(
+        { error, filename, message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : 'No stack' },
+        'Error indexing zip'
+      );
       throw error;
     }
   } else {
@@ -131,7 +127,7 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
     const messages = parseTextFile(zipPath, chatId);
 
     if (messages.length === 0) {
-      console.log(`  No messages found in ${filename}`);
+      logger.info({ filename }, 'No messages found');
       return;
     }
 
@@ -152,16 +148,16 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
 
     db.upsertChat(chat);
     db.insertMessages(messages);
-    console.log(`  Indexed ${messages.length} messages for ${filename}`);
+    logger.info({ filename, messageCount: messages.length }, 'Indexed txt file');
   }
-  console.log(`[DEBUG] Finished indexing: ${filename}`);
+  logger.debug({ filename }, 'Finished indexing');
 }
 
 // Re-index all zip and txt files in a directory
 export async function reindexAll(directory: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
   const files = readdirSync(directory).filter(f => f.endsWith('.zip') || f.endsWith('.txt'));
 
-  console.log(`Found ${files.length} files to index`);
+  logger.info({ directory, fileCount: files.length }, 'Starting reindex of all files');
 
   for (const file of files) {
     const filePath = join(directory, file);
@@ -170,7 +166,7 @@ export async function reindexAll(directory: string, db: WhatsAppDatabase, tempDi
     }
   }
 
-  console.log('Indexing complete');
+  logger.info('Reindexing complete');
 }
 
 // Re-index a specific chat
@@ -180,11 +176,9 @@ export async function reindexChat(chatId: string, db: WhatsAppDatabase, tempDir:
     throw new Error(`Chat ${chatId} not found`);
   }
 
-  console.log(`Re-indexing chat: ${chat.filename}`);
+  logger.info({ chatId, filename: chat.filename }, 'Re-indexing chat');
 
-  // Delete old messages
   db.deleteMessages(chatId);
 
-  // Re-index
   await indexZip(chat.originalPath || '', db, tempDir);
 }
