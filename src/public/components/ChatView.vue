@@ -57,7 +57,7 @@ async function loadChat(chatId: string) {
 
     await nextTick();
     setupObserver();
-    scrollToTop();
+    scrollToBottom();
   } catch (err) {
     error.value = (err as Error).message;
     isLoading.value = false;
@@ -75,10 +75,16 @@ async function loadMore() {
     hasMore.value = response.pagination.hasMore;
     if (response.messages.length === 0) return;
 
-    // Append older messages to the end
-    messages.value = [...messages.value, ...response.messages];
+    const container = messagesContainer.value;
+    const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
+
+    messages.value = [...response.messages, ...messages.value];
 
     await nextTick();
+    if (container) {
+      container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
+    }
   } catch (err) {
     console.error('Error loading more messages:', err);
   } finally {
@@ -86,10 +92,10 @@ async function loadMore() {
   }
 }
 
-function scrollToTop() {
+function scrollToBottom() {
   nextTick(() => {
     if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = 0;
+      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
     }
   });
 }
@@ -110,11 +116,19 @@ async function scrollToMessage(messageId: number) {
 
         if (response.messages.length === 0) break;
 
-        // Append older messages to the end
-        messages.value = [...messages.value, ...response.messages];
+        const container = messagesContainer.value;
+        const prevScrollHeight = container?.scrollHeight || 0;
+        const prevScrollTop = container?.scrollTop || 0;
+
+        messages.value = [...response.messages, ...messages.value];
 
         await nextTick();
         element = document.getElementById(`message-${messageId}`);
+
+        // Restore scroll position if message not found yet
+        if (!element && container) {
+          container.scrollTop = prevScrollTop + (container.scrollHeight - prevScrollHeight);
+        }
       }
     } finally {
       isFetchingMore.value = false;
@@ -156,6 +170,7 @@ watch(
           <button @click="showSearch = !showSearch" title="Search messages">🔍</button>
         </div>
         <div ref="messagesContainer" class="chat-messages">
+          <div ref="loadMoreTrigger" />
           <div v-if="messages.length === 0" class="empty-state">
             <p>No messages in this chat</p>
           </div>
@@ -165,7 +180,6 @@ watch(
             :message="msg"
             :chat-id="chatId"
           />
-          <div ref="loadMoreTrigger" />
         </div>
         <SearchPanel
           v-if="showSearch"

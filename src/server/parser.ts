@@ -50,6 +50,76 @@ function cleanText(text: string): string {
   return text.replace(/[‎‏‪-‮⁦-⁩]/g, '').trim();
 }
 
+// Parse WhatsApp date string to Unix timestamp
+function parseDateTime(dateStr: string, timeStr: string): number {
+  let month: number, day: number, year: number;
+
+  // Parse date string
+  const dateParts = dateStr.split('/');
+  if (dateParts.length === 3) {
+    // Format: M/D/YYYY or M/D/YY
+    month = parseInt(dateParts[0], 10);
+    day = parseInt(dateParts[1], 10);
+    let yearStr = dateParts[2];
+
+    // Handle 2-digit years (00-99)
+    if (yearStr.length === 2) {
+      const yearNum = parseInt(yearStr, 10);
+      // Years 00-99: if > current year's last 2 digits, assume 1900s, else 2000s
+      const currentYear = new Date().getFullYear();
+      const currentYearSuffix = currentYear % 100;
+      if (yearNum > currentYearSuffix) {
+        year = 1900 + yearNum;
+      } else {
+        year = 2000 + yearNum;
+      }
+    } else {
+      year = parseInt(yearStr, 10);
+    }
+  } else {
+    // Fallback to current date if parsing fails
+    return Date.now();
+  }
+
+  // Parse time string
+  let hours: number, minutes: number, seconds: number = 0;
+  let isPM = false;
+
+  // Remove spaces and lowercase for matching
+  const timeLower = timeStr.toLowerCase().trim();
+
+  // Check for AM/PM indicator
+  if (timeLower.includes('pm')) {
+    isPM = true;
+  }
+
+  // Extract time parts (handle formats like "6:56:06 pm", "10:00 AM", "11:02:13")
+  const timeMatch = timeLower.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (timeMatch) {
+    hours = parseInt(timeMatch[1], 10);
+    minutes = parseInt(timeMatch[2], 10);
+    if (timeMatch[3]) {
+      seconds = parseInt(timeMatch[3], 10);
+    }
+
+    // Convert to 24-hour format
+    if (isPM && hours !== 12) {
+      hours += 12;
+    } else if (!isPM && hours === 12) {
+      hours = 0;
+    }
+  } else {
+    // Fallback to midnight if time parsing fails
+    hours = 0;
+    minutes = 0;
+    seconds = 0;
+  }
+
+  // Create Date object and return timestamp
+  // Note: Date constructor uses 0-based month (0=Jan, 1=Feb, etc.)
+  return new Date(year, month - 1, day, hours, minutes, seconds).getTime();
+}
+
 // WhatsApp date formats:
 // 1) M/D/YYYY H:MM:SS am/pm - Sender: Message
 // 2) M/D/YY, H:MM AM/PM - Sender: Message  (_chat.txt format)
@@ -237,6 +307,7 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
       isSystemMessage,
       mediaFilename,
       mediaType,
+      datetime: parseDateTime(date, time),
     });
   }
 

@@ -13,6 +13,7 @@ export type Message = {
   isSystemMessage: boolean;
   mediaFilename: string | null;
   mediaType: MediaType | null;
+  datetime: number;
 }
 
 export interface Chat {
@@ -60,6 +61,7 @@ export interface MessageInput {
   isSystemMessage: boolean;
   mediaFilename: string | null;
   mediaType: MediaType | null;
+  datetime: number;
 }
 
 export interface SearchResult {
@@ -158,14 +160,22 @@ export class WhatsAppDatabase {
         is_system_message INTEGER DEFAULT 0,
         media_filename TEXT,
         media_type TEXT,
+        datetime INTEGER,
         FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
       );
     `);
 
+    // Add datetime column to existing messages table if it doesn't exist
+    try {
+      this.db.exec('ALTER TABLE messages ADD COLUMN datetime INTEGER');
+    } catch {
+      // Column already exists, ignore error
+    }
+
     // Indexes for queries
     this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_messages_chat_position ON messages(chat_id, position);
-      CREATE INDEX IF NOT EXISTS idx_messages_chat_date ON messages(chat_id, date DESC);
+      CREATE INDEX IF NOT EXISTS idx_messages_chat_datetime ON messages(chat_id, datetime DESC);
     `);
 
     // Fix legacy FTS table that had a stale message_id column
@@ -231,8 +241,8 @@ export class WhatsAppDatabase {
     logger.debug({ messageCount: messages.length }, 'Inserting messages');
     const insert = this.db.prepare(`
       INSERT INTO messages (chat_id, position, date, time, sender, text,
-                           is_system_message, media_filename, media_type)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           is_system_message, media_filename, media_type, datetime)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const CHUNK_SIZE = 5000;
     const totalChunks = Math.ceil(messages.length / CHUNK_SIZE);
@@ -253,7 +263,8 @@ export class WhatsAppDatabase {
             msg.text,
             msg.isSystemMessage ? 1 : 0,
             msg.mediaFilename || null,
-            msg.mediaType || null
+            msg.mediaType || null,
+            msg.datetime
           );
         }
       });
@@ -305,7 +316,7 @@ export class WhatsAppDatabase {
              media_filename as mediaFilename, media_type as mediaType
       FROM messages
       WHERE chat_id = ?
-      ORDER BY position ASC
+      ORDER BY datetime DESC
       LIMIT ? OFFSET ?
     `);
     return stmt.all(chatId, limit, offset) as MessageOutput[];
