@@ -194,6 +194,7 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     let sender: string | null;
     let text: string;
     let isSystemMessage: boolean;
+    let ampm: string | undefined;
 
     // Handle different regex formats
     if (matchedRegexIndex === 4 || matchedRegexIndex === 5) {
