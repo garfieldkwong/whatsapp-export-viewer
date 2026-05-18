@@ -18,7 +18,7 @@ const mediaUrl = computed(() =>
 </script>
 
 <template>
-  <div class="message" :class="{ system: message.isSystemMessage, incoming: isIncoming, outgoing: !isIncoming && !message.isSystemMessage }">
+  <div :id="`message-${message.id}`" class="message" :class="{ system: message.isSystemMessage, incoming: isIncoming, outgoing: !isIncoming && !message.isSystemMessage }">
     <div class="message-bubble">
       <div v-if="!message.isSystemMessage && message.sender" class="message-sender" v-html="escapeHtml(message.sender)" />
       <div class="message-text" v-html="linkify(message.text)" />
@@ -51,3 +51,13 @@ const mediaUrl = computed(() =>
     </div>
   </div>
 </template>
+
+<style scoped>
+.message {
+  transition: background-color 0.3s ease;
+}
+
+.message.highlight {
+  background-color: rgba(255, 255, 0, 0.3);
+}
+</style>

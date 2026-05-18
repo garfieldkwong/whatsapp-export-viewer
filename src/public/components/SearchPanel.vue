@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'select', messageId: number): void;
 }>();
 
 const query = ref('');
@@ -66,6 +67,7 @@ function relevanceClass(score: number | undefined): string {
         v-for="result in results"
         :key="result.id"
         class="search-result-item"
+        @click="emit('select', result.id)"
       >
         <div class="search-result-header">
           <span class="search-result-chat" v-html="escapeHtml(result.chatName || result.filename || '')" />
@@ -77,3 +79,14 @@ function relevanceClass(score: number | undefined): string {
     </div>
   </div>
 </template>
+
+<style scoped>
+.search-result-item {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.search-result-item:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+</style>

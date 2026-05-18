@@ -100,6 +100,18 @@ function scrollToBottom() {
   });
 }
 
+function scrollToMessage(messageId: number) {
+  showSearch.value = false;
+  nextTick(() => {
+    const element = document.getElementById(`message-${messageId}`);
+    if (element && messagesContainer.value) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('highlight');
+      setTimeout(() => element.classList.remove('highlight'), 2000);
+    }
+  });
+}
+
 watch(
   () => props.chatId,
   (newId) => {
@@ -140,6 +152,7 @@ watch(
           v-if="showSearch"
           :current-chat-id="chatId"
           @close="showSearch = false"
+          @select="scrollToMessage"
         />
       </template>
     </template>
