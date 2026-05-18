@@ -310,7 +310,7 @@ export class WhatsAppDatabase {
 
   // Get messages with pagination (for lazy loading)
   getMessages(chatId: string, offset: number = 0, limit: number = 50): MessageOutput[] {
-    const stmt = this.db.prepare(`
+    const sql = `
       SELECT id, date, time, sender, text,
              is_system_message as isSystemMessage,
              media_filename as mediaFilename, media_type as mediaType
@@ -318,7 +318,9 @@ export class WhatsAppDatabase {
       WHERE chat_id = ?
       ORDER BY position DESC
       LIMIT ? OFFSET ?
-    `);
+    `;
+    logger.debug({ sql, params: [chatId, limit, offset] }, 'Executing getMessages query');
+    const stmt = this.db.prepare(sql);
     return stmt.all(chatId, limit, offset) as MessageOutput[];
   }
 
