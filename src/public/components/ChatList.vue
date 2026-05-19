@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import type { Chat } from '../types';
 import { fetchChats, reindexAll } from '../composables/api';
 import { formatDate, escapeHtml } from '../composables/utils';
@@ -77,7 +77,20 @@ function onResizeMouseDown(e: MouseEvent) {
   document.addEventListener('mouseup', onMouseUp);
 }
 
-onMounted(loadChats);
+function onResize() {
+  if (window.innerWidth < 768 && sidebar.value) {
+    sidebar.value.style.width = '';
+  }
+}
+
+onMounted(() => {
+  loadChats();
+  window.addEventListener('resize', onResize);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize);
+});
 </script>
 
 <template>

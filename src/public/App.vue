@@ -3,13 +3,15 @@ import { ref, watch, onMounted, onUnmounted } from 'vue';
 import ChatList from './components/ChatList.vue';
 import ChatView from './components/ChatView.vue';
 
+const MOBILE_BREAKPOINT = 768;
+
 const currentChatId = ref<string | null>(null);
 const showSidebar = ref(true);
-const isMobile = ref(false);
+const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT);
 
 function checkMobile() {
   const wasMobile = isMobile.value;
-  isMobile.value = window.innerWidth < 768;
+  isMobile.value = window.innerWidth < MOBILE_BREAKPOINT;
   if (!isMobile.value) {
     showSidebar.value = true;
   } else if (!wasMobile && currentChatId.value) {
@@ -48,7 +50,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app" :class="{ 'sidebar-visible': showSidebar }">
+  <div class="app" :class="{ 'mobile-layout': isMobile, 'sidebar-visible': showSidebar }">
     <ChatList
       :current-chat-id="currentChatId"
       :class="{ 'mobile-hidden': isMobile && !showSidebar }"
