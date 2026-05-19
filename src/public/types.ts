@@ -1,6 +1,7 @@
 export interface Chat {
   id: string;
   displayName: string;
+  folder: string;
   messageCount: number;
   firstMessageDate: string | null;
   lastMessageDate: string | null;

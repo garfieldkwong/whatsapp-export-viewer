@@ -41,11 +41,23 @@ app.get('/api/health', (req: Request, res: Response) => {
 // Get all chats
 app.get('/api/chats', (req: Request, res: Response) => {
   try {
-    const chats = db.getAllChats();
+    const folder = (req.query.folder as string | undefined) || null;
+    const chats = db.getAllChats(folder);
     res.json(chats);
   } catch (error) {
     logger.error({ error }, 'Failed to fetch chats');
     res.status(500).json({ error: 'Failed to fetch chats' });
+  }
+});
+
+// Get all folders
+app.get('/api/folders', (req: Request, res: Response) => {
+  try {
+    const folders = db.getAllFolders();
+    res.json(folders);
+  } catch (error) {
+    logger.error({ error }, 'Failed to fetch folders');
+    res.status(500).json({ error: 'Failed to fetch folders' });
   }
 });
 
@@ -179,7 +191,7 @@ app.get('/api/media/:chatId/:filename(*)', async (req: Request, res: Response) =
 // Trigger reindex of a chat
 app.post('/api/chats/:id/reindex', async (req: Request, res: Response) => {
   try {
-    await reindexChat(req.params.id as string, db, tempDir);
+    await reindexChat(req.params.id as string, db, tempDir, watchDir);
     res.json({ status: 'ok' });
   } catch (error) {
     logger.error({ error, chatId: req.params.id }, 'Failed to reindex chat');

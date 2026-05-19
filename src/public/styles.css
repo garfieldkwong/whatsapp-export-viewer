@@ -101,6 +101,43 @@ body {
   flex-shrink: 0;
 }
 
+.folder-bar {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.folder-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.folder-btn {
+  padding: 6px 14px;
+  background: var(--bg-chat);
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.folder-btn:hover {
+  background: var(--bg-hover);
+}
+
+.folder-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
 .search-box input {
   width: 100%;
   padding: 10px 16px;
@@ -741,6 +778,16 @@ body {
 
   .sidebar-header h1 {
     font-size: 13px;
+  }
+
+  .folder-bar {
+    padding: 6px 12px;
+    gap: 4px;
+  }
+
+  .folder-btn {
+    padding: 5px 10px;
+    font-size: 12px;
   }
 
   .search-box {

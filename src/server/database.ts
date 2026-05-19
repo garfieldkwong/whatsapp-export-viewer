@@ -19,6 +19,7 @@ export type Message = {
 export interface Chat {
   id: string;
   filename: string;
+  folder: string;
   originalPath?: string;
   displayName: string;
   messageCount: number;
@@ -32,6 +33,7 @@ export interface ChatInput {
   filename: string;
   originalPath: string;
   displayName: string;
+  folder: string;
   messageCount: number;
   firstMessageDate: string | null;
   lastMessageDate: string | null;
@@ -138,14 +140,61 @@ export class WhatsAppDatabase {
         filename TEXT NOT NULL,
         original_path TEXT NOT NULL,
         display_name TEXT,
+        folder TEXT NOT NULL DEFAULT '',
         message_count INTEGER DEFAULT 0,
         first_message_date TEXT,
         last_message_date TEXT,
         last_message_preview TEXT,
         indexed_at INTEGER NOT NULL,
-        UNIQUE (filename)
+        UNIQUE (original_path)
       );
     `);
+
+    // Migrate: add folder column if missing
+    try {
+      this.db.exec('ALTER TABLE chats ADD COLUMN folder TEXT NOT NULL DEFAULT \'\'');
+    } catch {
+      // Column already exists
+    }
+
+    // Migrate: change UNIQUE constraint from filename to original_path
+    try {
+      const tableInfo = this.db.pragma('table_info(chats)') as { name: string }[];
+      const hasFolder = tableInfo.some(col => col.name === 'folder');
+      if (hasFolder) {
+        const indexes = this.db.pragma('index_list(chats)') as { name: string }[];
+        for (const idx of indexes) {
+          if (idx.name.startsWith('sqlite_autoindex_chats')) {
+            const idxInfo = this.db.pragma(`index_info('${idx.name}')`) as { name: string }[];
+            const cols = idxInfo.map(i => i.name);
+            if (cols.includes('filename') && !cols.includes('original_path')) {
+              logger.info('Migrating chats UNIQUE constraint from filename to original_path');
+              this.db.exec(`
+                CREATE TABLE IF NOT EXISTS chats_new (
+                  id TEXT PRIMARY KEY,
+                  filename TEXT NOT NULL,
+                  original_path TEXT NOT NULL,
+                  display_name TEXT,
+                  folder TEXT NOT NULL DEFAULT '',
+                  message_count INTEGER DEFAULT 0,
+                  first_message_date TEXT,
+                  last_message_date TEXT,
+                  last_message_preview TEXT,
+                  indexed_at INTEGER NOT NULL,
+                  UNIQUE (original_path)
+                );
+                INSERT OR IGNORE INTO chats_new SELECT * FROM chats;
+                DROP TABLE chats;
+                ALTER TABLE chats_new RENAME TO chats;
+              `);
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      logger.debug({ error: e }, 'Chats table migration check skipped');
+    }
 
     // Messages table - stores individual messages
     this.db.exec(`
@@ -214,10 +263,13 @@ export class WhatsAppDatabase {
   }
   upsertChat(chat: ChatInput): Database.RunResult {
     const stmt = this.db.prepare(`
-      INSERT INTO chats (id, filename, original_path, display_name, message_count,
+      INSERT INTO chats (id, filename, original_path, display_name, folder, message_count,
                          first_message_date, last_message_date, last_message_preview, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(filename) DO UPDATE SET
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(original_path) DO UPDATE SET
+        id = excluded.id,
+        filename = excluded.filename,
+        folder = excluded.folder,
         message_count = excluded.message_count,
         first_message_date = excluded.first_message_date,
         last_message_date = excluded.last_message_date,
@@ -229,6 +281,7 @@ export class WhatsAppDatabase {
       chat.filename,
       chat.originalPath,
       chat.displayName,
+      chat.folder,
       chat.messageCount,
       chat.firstMessageDate,
       chat.lastMessageDate,
@@ -286,21 +339,34 @@ export class WhatsAppDatabase {
   }
 
   // Get all chats
-  getAllChats(): Chat[] {
-    const stmt = this.db.prepare(`
-      SELECT id, filename, display_name as displayName, message_count as messageCount,
+  getAllChats(folder?: string | null): Chat[] {
+    let sql = `
+      SELECT id, filename, folder, display_name as displayName, message_count as messageCount,
              first_message_date as firstMessageDate, last_message_date as lastMessageDate,
              last_message_preview as lastMessagePreview
       FROM chats
-      ORDER BY last_message_date DESC
+    `;
+    const params: string[] = [];
+    if (folder !== undefined && folder !== null) {
+      sql += ' WHERE folder = ?';
+      params.push(folder);
+    }
+    sql += ' ORDER BY last_message_date DESC';
+    const stmt = this.db.prepare(sql);
+    return stmt.all(...params) as Chat[];
+  }
+
+  getAllFolders(): string[] {
+    const stmt = this.db.prepare(`
+      SELECT DISTINCT folder FROM chats WHERE folder != '' ORDER BY folder
     `);
-    return stmt.all() as Chat[];
+    return (stmt.all() as { folder: string }[]).map(r => r.folder);
   }
 
   // Get a single chat
   getChat(chatId: string): Chat | undefined {
     const stmt = this.db.prepare(`
-      SELECT id, filename, original_path as originalPath, display_name as displayName, message_count as messageCount,
+      SELECT id, filename, folder, original_path as originalPath, display_name as displayName, message_count as messageCount,
              first_message_date as firstMessageDate, last_message_date as lastMessageDate,
              last_message_preview as lastMessagePreview
       FROM chats WHERE id = ?

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import type { Chat } from '../types';
-import { fetchChats, reindexAll } from '../composables/api';
+import { fetchChats, fetchFolders, reindexAll } from '../composables/api';
 import { formatDate, escapeHtml } from '../composables/utils';
 
 const props = defineProps<{
@@ -13,31 +13,53 @@ const emit = defineEmits<{
 }>();
 
 const allChats = ref<Chat[]>([]);
+const folders = ref<string[]>([]);
+const selectedFolder = ref<string | null>(null);
 const searchQuery = ref('');
 const error = ref<string | null>(null);
 const isReindexing = ref(false);
 
 const filteredChats = computed(() => {
   const query = searchQuery.value.toLowerCase();
-  if (!query) return allChats.value;
-  return allChats.value.filter(chat =>
-    chat.displayName.toLowerCase().includes(query)
-  );
+  let chats = allChats.value;
+  if (query) {
+    chats = chats.filter(chat =>
+      chat.displayName.toLowerCase().includes(query)
+    );
+  }
+  return chats;
 });
+
+const folderDisplayName = computed(() => (folder: string) => {
+  return folder.split('/').pop() || folder;
+});
+
+async function loadFolders() {
+  try {
+    folders.value = await fetchFolders();
+  } catch {
+    folders.value = [];
+  }
+}
 
 async function loadChats() {
   try {
     error.value = null;
-    allChats.value = await fetchChats();
+    allChats.value = await fetchChats(selectedFolder.value);
   } catch (err) {
     error.value = (err as Error).message;
   }
+}
+
+async function onFolderChange() {
+  await loadChats();
 }
 
 async function handleReindex() {
   isReindexing.value = true;
   try {
     await reindexAll();
+    await loadFolders();
     await loadChats();
   } catch (err) {
     alert('Failed to reindex: ' + (err as Error).message);
@@ -84,6 +106,7 @@ function onResize() {
 }
 
 onMounted(() => {
+  loadFolders();
   loadChats();
   window.addEventListener('resize', onResize);
 });
@@ -108,6 +131,24 @@ onUnmounted(() => {
         @click="handleReindex"
       >
         🔄
+      </button>
+    </div>
+    <div v-if="folders.length > 0" class="folder-bar">
+      <button
+        class="folder-btn"
+        :class="{ active: selectedFolder === null }"
+        @click="selectedFolder = null; onFolderChange()"
+      >
+        All
+      </button>
+      <button
+        v-for="folder in folders"
+        :key="folder"
+        class="folder-btn"
+        :class="{ active: selectedFolder === folder }"
+        @click="selectedFolder = folder; onFolderChange()"
+      >
+        {{ folderDisplayName(folder) }}
       </button>
     </div>
     <div class="search-box">

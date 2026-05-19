@@ -1,17 +1,13 @@
 import { extractAndParseZip, parseTextFile } from './parser.js';
-import { join, basename, dirname } from 'path';
+import { join, basename, dirname, relative } from 'path';
 import { WhatsAppDatabase } from './database.js';
 import { readdirSync, statSync, rmSync, existsSync } from 'fs';
 import { createHash } from 'crypto';
 import logger from './logger.js';
 
-// Generate display name from filename
 function getDisplayName(filename: string): string {
-  // Remove .zip extension and common prefixes
   let name = filename.replace(/\.zip$/i, '');
 
-  // Try to extract a readable name from common patterns
-  // E.g., "WhatsApp Chat with John Doe.txt" -> "John Doe"
   const withMatch = name.match(/with\s+(.+)$/i);
   if (withMatch) {
     return withMatch[1].trim();
@@ -20,7 +16,6 @@ function getDisplayName(filename: string): string {
   return name;
 }
 
-// Generate last message preview (truncate and clean)
 function getPreview(text: string, maxLength: number = 50): string {
   if (!text) return '';
   let preview = text.replace(/\n/g, ' ').trim();
@@ -30,21 +25,23 @@ function getPreview(text: string, maxLength: number = 50): string {
   return preview;
 }
 
-// Create a safe chat ID from filename (for database keys)
-export function createChatId(filename: string): string {
-  // Remove .zip extension
-  const baseName = filename.replace(/\.zip$/i, '');
-  // Hash = filename if it contains non-ASCII characters to create a safe ID
-  // Use MD5 hash of filename for safe database key
-  const hash = createHash('md5').update(baseName).digest('hex');
+export function createChatId(filePath: string, watchDir: string): string {
+  const relPath = relative(watchDir, filePath).replace(/\\/g, '/');
+  const hash = createHash('md5').update(relPath).digest('hex');
   return `chat_${hash}`;
 }
 
-// Index all txt files found inside a zip
-async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
+function getFolderFromPath(filePath: string, watchDir: string): string {
+  const rel = relative(watchDir, filePath).replace(/\\/g, '/');
+  const parts = rel.split('/');
+  if (parts.length <= 1) return '';
+  return parts.slice(0, -1).join('/');
+}
+
+async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: string, db: WhatsAppDatabase, tempDir: string, watchDir: string, folder: string): Promise<void> {
   for (const txtFile of txtFiles) {
     const txtFilePath = join(extractDir, txtFile);
-    const chatId = createChatId(txtFile);
+    const chatId = createChatId(txtFile, watchDir);
     const messages = parseTextFile(txtFilePath, chatId);
 
     if (messages.length === 0) {
@@ -60,6 +57,7 @@ async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: st
       filename: txtFile,
       originalPath: zipPath,
       displayName: getDisplayName(txtFile),
+      folder,
       messageCount: messages.length,
       firstMessageDate: firstMsg.date,
       lastMessageDate: lastMsg.date,
@@ -74,17 +72,18 @@ async function indexTxtFiles(txtFiles: string[], zipPath: string, extractDir: st
   }
 }
 
-// Index a single zip file
-export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
+export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: string, watchDir: string): Promise<void> {
   const filename = basename(zipPath);
   const isZip = zipPath.endsWith('.zip');
+  const folder = getFolderFromPath(zipPath, watchDir);
+  const chatId = createChatId(zipPath, watchDir);
 
-  logger.debug({ filename, isZip, tempDir }, 'Starting to index');
+  logger.debug({ filename, isZip, tempDir, folder }, 'Starting to index');
 
   if (isZip) {
     try {
       logger.debug({ filename }, 'Calling extractAndParseZip');
-      const { chatId, extractDir, txtFile, messages, mediaFiles } = await extractAndParseZip(zipPath, tempDir);
+      const { extractDir, txtFile, messages, mediaFiles } = await extractAndParseZip(zipPath, tempDir, chatId);
       logger.debug({ filename, chatId, txtFile, messageCount: messages.length, mediaFileCount: mediaFiles.length }, 'Extracted');
 
       if (messages.length === 0) {
@@ -100,6 +99,7 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
         filename: filename,
         originalPath: zipPath,
         displayName: getDisplayName(filename),
+        folder,
         messageCount: messages.length,
         firstMessageDate: firstMsg.date,
         lastMessageDate: lastMsg.date,
@@ -122,8 +122,6 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
       throw error;
     }
   } else {
-    // Handle standalone txt file (not in zip)
-    const chatId = createChatId(filename);
     const messages = parseTextFile(zipPath, chatId);
 
     if (messages.length === 0) {
@@ -139,6 +137,7 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
       filename,
       originalPath: zipPath,
       displayName: getDisplayName(filename),
+      folder,
       messageCount: messages.length,
       firstMessageDate: firstMsg.date,
       lastMessageDate: lastMsg.date,
@@ -153,24 +152,37 @@ export async function indexZip(zipPath: string, db: WhatsAppDatabase, tempDir: s
   logger.debug({ filename }, 'Finished indexing');
 }
 
-// Re-index all zip and txt files in a directory
+function collectFilesRecursive(directory: string): string[] {
+  const results: string[] = [];
+  const entries = readdirSync(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const fullPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectFilesRecursive(fullPath));
+    } else if (entry.isFile() && (entry.name.endsWith('.zip') || entry.name.endsWith('.txt'))) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
 export async function reindexAll(directory: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
-  const files = readdirSync(directory).filter(f => f.endsWith('.zip') || f.endsWith('.txt'));
+  const files = collectFilesRecursive(directory);
 
   logger.info({ directory, fileCount: files.length }, 'Starting reindex of all files');
 
-  for (const file of files) {
-    const filePath = join(directory, file);
+  for (const filePath of files) {
     if (statSync(filePath).isFile()) {
-      await indexZip(filePath, db, tempDir);
+      await indexZip(filePath, db, tempDir, directory);
     }
   }
 
   logger.info('Reindexing complete');
 }
 
-// Re-index a specific chat
-export async function reindexChat(chatId: string, db: WhatsAppDatabase, tempDir: string): Promise<void> {
+export async function reindexChat(chatId: string, db: WhatsAppDatabase, tempDir: string, watchDir: string): Promise<void> {
   const chat = db.getChat(chatId);
   if (!chat) {
     throw new Error(`Chat ${chatId} not found`);
@@ -180,5 +192,5 @@ export async function reindexChat(chatId: string, db: WhatsAppDatabase, tempDir:
 
   db.deleteMessages(chatId);
 
-  await indexZip(chat.originalPath || '', db, tempDir);
+  await indexZip(chat.originalPath || '', db, tempDir, watchDir);
 }

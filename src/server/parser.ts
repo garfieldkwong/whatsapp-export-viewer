@@ -350,10 +350,10 @@ function extractEntry(zipfile: yauzl.ZipFile, entry: yauzl.Entry, destPath: stri
 }
 
 // Extract zip file - only reads txt file, lists media files (streaming, no size limit)
-export async function extractAndParseZip(zipPath: string, tempDir: string): Promise<ExtractionResult> {
+export async function extractAndParseZip(zipPath: string, tempDir: string, chatIdOverride?: string): Promise<ExtractionResult> {
   const filename = basename(zipPath);
   const baseName = filename.replace(/\.zip$/i, '');
-  const chatId = baseName;
+  const chatId = chatIdOverride || baseName;
   const extractDir = join(tempDir, chatId);
 
   logger.debug({ filename, zipPath, tempDir, extractDir }, 'Extracting and parsing zip');

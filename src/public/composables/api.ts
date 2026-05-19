@@ -2,9 +2,18 @@ import type { Chat, Message, PaginationResponse, SearchResponse } from '../types
 
 const API_BASE = '/api';
 
-export async function fetchChats(): Promise<Chat[]> {
-  const response = await fetch(`${API_BASE}/chats`);
+export async function fetchChats(folder?: string | null): Promise<Chat[]> {
+  const params = new URLSearchParams();
+  if (folder) params.set('folder', folder);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const response = await fetch(`${API_BASE}/chats${qs}`);
   if (!response.ok) throw new Error('Failed to load chats');
+  return response.json();
+}
+
+export async function fetchFolders(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/folders`);
+  if (!response.ok) throw new Error('Failed to load folders');
   return response.json();
 }
 
