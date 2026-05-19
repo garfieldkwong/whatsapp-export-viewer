@@ -8,6 +8,7 @@ const MOBILE_BREAKPOINT = 768;
 const currentChatId = ref<string | null>(null);
 const showSidebar = ref(true);
 const isMobile = ref(typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT);
+let skipPopState = false;
 
 function checkMobile() {
   const wasMobile = isMobile.value;
@@ -23,11 +24,25 @@ function onSelectChat(chatId: string) {
   currentChatId.value = chatId;
   if (isMobile.value) {
     showSidebar.value = false;
+    history.pushState({ chatView: true }, '');
   }
 }
 
 function onBackToList() {
   if (isMobile.value) {
+    skipPopState = true;
+    history.back();
+    showSidebar.value = true;
+    currentChatId.value = null;
+  }
+}
+
+function onPopState() {
+  if (skipPopState) {
+    skipPopState = false;
+    return;
+  }
+  if (isMobile.value && currentChatId.value !== null) {
     showSidebar.value = true;
     currentChatId.value = null;
   }
@@ -42,10 +57,12 @@ watch(currentChatId, (newId) => {
 onMounted(() => {
   checkMobile();
   window.addEventListener('resize', checkMobile);
+  window.addEventListener('popstate', onPopState);
 });
 
 onUnmounted(() => {
   window.removeEventListener('resize', checkMobile);
+  window.removeEventListener('popstate', onPopState);
 });
 </script>
 
