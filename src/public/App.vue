@@ -24,7 +24,7 @@ function onSelectChat(chatId: string) {
   currentChatId.value = chatId;
   if (isMobile.value) {
     showSidebar.value = false;
-    history.pushState({ chatView: true }, '');
+    history.pushState({ chatView: true }, '', window.location.href);
   }
 }
 
@@ -37,12 +37,13 @@ function onBackToList() {
   }
 }
 
-function onPopState() {
+function onPopState(event: PopStateEvent) {
   if (skipPopState) {
     skipPopState = false;
     return;
   }
   if (isMobile.value && currentChatId.value !== null) {
+    event.preventDefault();
     showSidebar.value = true;
     currentChatId.value = null;
   }
@@ -56,6 +57,7 @@ watch(currentChatId, (newId) => {
 
 onMounted(() => {
   checkMobile();
+  history.replaceState({ chatView: false }, '', window.location.href);
   window.addEventListener('resize', checkMobile);
   window.addEventListener('popstate', onPopState);
 });
