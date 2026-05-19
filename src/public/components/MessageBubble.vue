@@ -9,12 +9,20 @@ const props = defineProps<{
   chatId: string;
 }>();
 
+const emit = defineEmits<{
+  (e: 'media-loaded'): void;
+}>();
+
 const isIncoming = computed(() => props.message.sender && props.message.sender !== 'Me');
 const mediaUrl = computed(() =>
   props.message.mediaFilename
     ? getMediaUrl(props.chatId, props.message.mediaFilename)
     : ''
 );
+
+function onMediaLoad() {
+  emit('media-loaded');
+}
 </script>
 
 <template>
@@ -29,8 +37,9 @@ const mediaUrl = computed(() =>
           alt="Image"
           loading="lazy"
           @click="window.open(mediaUrl, '_blank')"
+          @load="onMediaLoad"
         />
-        <video v-else-if="message.mediaType === 'video'" :src="mediaUrl" controls />
+        <video v-else-if="message.mediaType === 'video'" :src="mediaUrl" controls @loadeddata="onMediaLoad" />
         <audio v-else-if="message.mediaType === 'audio'" :src="mediaUrl" controls />
         <a v-else-if="message.mediaType === 'document'" :href="mediaUrl" target="_blank" class="file-attachment">
           <span class="file-icon">📄</span>

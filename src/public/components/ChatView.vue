@@ -24,9 +24,17 @@ const isFetchingMore = ref(false);
 const messagesContainer = ref<HTMLElement | null>(null);
 const loadMoreTrigger = ref<HTMLElement | null>(null);
 const showSearch = ref(false);
+const pinnedToBottom = ref(true);
 
 let observer: IntersectionObserver | null = null;
 let currentPage = 0;
+
+function checkPinnedToBottom() {
+  const container = messagesContainer.value;
+  if (!container) return;
+  const threshold = 50;
+  pinnedToBottom.value = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+}
 
 function setupObserver() {
   if (observer) observer.disconnect();
@@ -100,8 +108,15 @@ function scrollToBottom() {
   nextTick(() => {
     if (messagesContainer.value) {
       messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+      pinnedToBottom.value = true;
     }
   });
+}
+
+function onMediaLoaded() {
+  if (pinnedToBottom.value) {
+    scrollToBottom();
+  }
 }
 
 async function scrollToMessage(messageId: number) {
@@ -170,7 +185,7 @@ watch(
           <h2>{{ chat.displayName }}</h2>
           <button @click="showSearch = !showSearch" title="Search messages">🔍</button>
         </div>
-        <div ref="messagesContainer" class="chat-messages">
+        <div ref="messagesContainer" class="chat-messages" @scroll="checkPinnedToBottom">
           <div ref="loadMoreTrigger" />
           <div v-if="messages.length === 0" class="empty-state">
             <p>No messages in this chat</p>
@@ -180,6 +195,7 @@ watch(
             :key="msg.id"
             :message="msg"
             :chat-id="chatId"
+            @media-loaded="onMediaLoaded"
           />
         </div>
         <SearchPanel
