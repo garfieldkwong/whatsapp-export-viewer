@@ -120,28 +120,90 @@ function parseDateTime(dateStr: string, timeStr: string): number {
   return new Date(year, month - 1, day, hours, minutes, seconds).getTime();
 }
 
-// WhatsApp date formats:
-// 1) M/D/YYYY H:MM:SS am/pm - Sender: Message
-// 2) M/D/YY, H:MM AM/PM - Sender: Message  (_chat.txt format)
-// 3) [M/D/YY, H:MM:SS AM/PM] Sender: Message (bracket format)
-// 4) [M/D/YYYY 下午/上午 H:MM:SS] Sender: Message (Chinese format)
-// 5) M/D/YY H:MM - Sender: Message (no am/pm)
-const MESSAGE_REGEXES = [
-  // Format: 5/7/2022 6:56:06 pm - Sender: Message (must have colon for sender-message separation)
-  /^(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[ap]m)?)\s+-\s+([^:]+):\s*(.*)$/i,
-  // Format: 12/25/22, 10:00 AM - +1 234 567 8900: Message
-  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\s+-\s+([^:]+):\s*(.*)$/i,
-  // Format: 12/25/22, 10:00 - +1 234 567 8900: Message (no am/pm)
-  /^(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+-\s+([^:]+):\s*(.*)$/i,
-  // Format: [12/25/22, 10:00:00 AM] Sender: Message
-  /^\[(\d{1,2}\/\d{1,2}\/\d{2}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+([^:]+):\s*(.*)$/i,
-  // Format: [9/8/2024 下午11:02:13] Group with Riza: Message (Chinese WhatsApp format)
-  /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
-  // Format: [9/8/2024, 下午11:02:13] Group with Riza: Message (Chinese format with comma)
-  /^\[(\d{1,2}\/\d{1,2}\/\d{4}),?\s+(上午|下午|am|pm)\s*(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
-  // Format: [9/8/2024 下午11:02:13] Message (system message without colon) - try to match any other bracketed format
-  /^\[(\d{1,2}\/\d{1,2}\/\d{4})\s+(上午|下午|am|pm)(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
+interface ParsedMessageHeader {
+  date: string;
+  time: string;
+  sender: string | null;
+  text: string;
+  isSystemMessage: boolean;
+}
+
+interface FormatRule {
+  regex: RegExp;
+  extract: (match: RegExpMatchArray) => ParsedMessageHeader;
+}
+
+const FORMAT_RULES: FormatRule[] = [
+  {
+    // Hyphen format: M/D/YYYY 6:56:06 pm - Sender: Message
+    // Also covers 2-digit year variants with/without comma and am/pm
+    regex: /^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[ap]m)?)\s+-\s+([^:]+):\s*(.*)$/i,
+    extract: (m) => {
+      const sender = m[3]?.trim() || null;
+      return { date: m[1], time: m[2], sender, text: m[4] || '', isSystemMessage: !sender };
+    },
+  },
+  {
+    // English bracket format: [12/25/22, 10:00:00 AM] Sender: Message
+    regex: /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?\s*[ap]m)\]\s+([^:]+):\s*(.*)$/i,
+    extract: (m) => {
+      const sender = m[3]?.trim() || null;
+      return { date: m[1], time: m[2], sender, text: m[4] || '', isSystemMessage: !sender };
+    },
+  },
+  {
+    // Chinese bracket format with sender: [9/8/2024 下午11:02:13] Sender: Message
+    regex: /^\[(\d{1,2}\/\d{1,2}\/\d{4}),?\s+(上午|下午|am|pm)\s*(\d{1,2}:\d{2}:\d{2})\]\s+([^:]+):\s*(.*)$/i,
+    extract: (m) => ({
+      date: m[1], time: `${m[2]}${m[3]}`, sender: m[4]?.trim() || null, text: m[5] || '', isSystemMessage: false,
+    }),
+  },
+  {
+    // Chinese bracket format system message: [9/8/2024 下午11:02:13] Message
+    regex: /^\[(\d{1,2}\/\d{1,2}\/\d{4}),?\s+(上午|下午|am|pm)\s*(\d{1,2}:\d{2}:\d{2})\]\s+(.+)$/i,
+    extract: (m) => ({
+      date: m[1], time: `${m[2]}${m[3]}`, sender: null, text: m[4], isSystemMessage: true,
+    }),
+  },
 ];
+
+const MEDIA_PATTERNS = [
+  /([A-Za-z0-9_ \-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
+  /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
+  /(?:<附件[：:]\s*|<Attachment[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
+  /(?:attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
+  /(?:附件[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
+];
+
+const MEDIA_INDICATORS: { keywords: string[]; type: MediaType }[] = [
+  { keywords: ['照片', '图片', 'image', 'photo', 'picture', '📷'], type: 'image' },
+  { keywords: ['视频', 'video', '🎥'], type: 'video' },
+  { keywords: ['音频', '语音', 'audio', 'voice', '🎵'], type: 'audio' },
+  { keywords: ['文件', 'document', 'file', '📎'], type: 'document' },
+];
+
+const MEDIA_OMITTED_RE = /(圖片|视频|音频|文件)已略去$/;
+
+function findUnusedMediaFile(
+  mediaFilesByType: Record<MediaType, string[]>,
+  usedMediaFiles: Set<string>,
+  preferredType: MediaType,
+  allowFallback: boolean,
+): { filename: string; type: MediaType } | null {
+  for (const file of mediaFilesByType[preferredType]) {
+    if (!usedMediaFiles.has(file)) {
+      return { filename: file, type: getMediaType(file) };
+    }
+  }
+  if (allowFallback) {
+    for (const file of mediaFilesByType.unknown) {
+      if (!usedMediaFiles.has(file)) {
+        return { filename: file, type: getMediaType(file) };
+      }
+    }
+  }
+  return null;
+}
 
 function parseWhatsAppText(textContent: string, chatId: string, availableMediaFiles: string[] = []): Message[] {
   const lines = textContent.split(/\r?\n/);
@@ -170,137 +232,56 @@ function parseWhatsAppText(textContent: string, chatId: string, availableMediaFi
     const cleanedLine = cleanText(lines[i]);
     if (!cleanedLine) continue;
 
-    let match = null;
-    let matchedRegexIndex = -1;
+    let header: ParsedMessageHeader | null = null;
 
-    for (let j = 0; j < MESSAGE_REGEXES.length; j++) {
-      match = cleanedLine.match(MESSAGE_REGEXES[j]);
+    for (const rule of FORMAT_RULES) {
+      const match = cleanedLine.match(rule.regex);
       if (match) {
-        matchedRegexIndex = j;
+        header = rule.extract(match);
         break;
       }
     }
 
-    if (!match) {
-      // This line doesn't start a new message — append to the previous one
+    if (!header) {
       if (messages.length > 0) {
         messages[messages.length - 1].text += '\n' + cleanedLine;
       }
       continue;
     }
 
-    let date: string;
-    let time: string;
-    let sender: string | null;
-    let text: string;
-    let isSystemMessage: boolean;
-    let ampm: string | undefined;
+    const { date, time, sender, text, isSystemMessage } = header;
 
-    // Handle different regex formats
-    if (matchedRegexIndex === 4 || matchedRegexIndex === 5) {
-      // Chinese format with colon: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 4: [9/8/2024 下午11:02:13] Sender: Message
-      // Index 5: [9/8/2024, 下午11:02:13] Sender: Message (with comma)
-      [, date, ampm, time, sender, text] = match;
-      // Combine am/pm with time for datetime parsing
-      time = `${ampm}${time}`;
-      isSystemMessage = false;
-    } else if (matchedRegexIndex === 6) {
-      // Chinese format without colon: [9/8/2024 下午11:02:13] Message (system)
-      [, date, ampm, time, text] = match;
-      sender = null;
-      // Combine am/pm with time for datetime parsing
-      time = `${ampm}${time}`;
-      isSystemMessage = true;
-    } else {
-      // Original formats: date, time, sender, message
-      // Indices 0-3: Hyphen format with 4-digit or 2-digit year
-      // Index 4: Bracket format with 2-digit year
-      const [, d, t, s, m] = match;
-      date = d;
-      time = t;
-      sender = s?.trim() || null;
-      text = m || '';
-      isSystemMessage = !sender;
-    }
-
-    // Extract media information if present
     let mediaFilename: string | null = null;
     let mediaType: MediaType | null = null;
     let cleanMessage = text;
 
-    // WhatsApp media attachments can appear in various formats:
-    // - "filename.ext (file attached)"
-    // - "filename.ext (附件檔案)"
-    // - "filename.ext"
-    // - "<attached: filename.ext>"
-    // - "<附件：filename.ext>" (Chinese format with fullwidth colon)
-    // - "IMG-20240101-WA0001.jpg (file attached)"
-    const mediaPatterns = [
-      /([A-Za-z0-9_ \-\.]+\.(?:jpg|jpeg|png|gif|webp|mp4|mov|avi|mkv|webm|mp3|m4a|wav|ogg|opus|pdf|doc|docx|xls|xlsx|ppt|pptx))\s*(?:\(附件檔案\)|\(file attached\)|\(attached\))?\s*$/i,
-      /(?:<attached:\s*|⟨attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
-      /(?:<附件[：:]\s*|<Attachment[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)(?:>|⟩)/i,
-      /(?:attached:\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
-      /(?:附件[：:]\s*)([A-Za-z0-9_ \-\.]+\.[A-Za-z0-9_ .-]+)/i,
-    ];
-
-    for (const pattern of mediaPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        mediaFilename = match[1];
+    for (const pattern of MEDIA_PATTERNS) {
+      const patternMatch = text.match(pattern);
+      if (patternMatch) {
+        mediaFilename = patternMatch[1];
         mediaType = getMediaType(mediaFilename);
-        // Remove the filename and attachment indicator from the message
         cleanMessage = text.replace(pattern, '').trim() || '<Media omitted>';
         usedMediaFiles.add(mediaFilename);
         break;
       }
     }
 
-    // If no media found in text but text looks like a media message, try to find a matching file
     if (!mediaFilename && availableMediaFiles.length > 0) {
-      // Check for media indicators in Chinese and English
-      const mediaIndicators: { text: string[]; type: MediaType }[] = [
-        { text: ['照片', '图片', 'image', 'photo', 'picture', '📷'], type: 'image' },
-        { text: ['视频', 'video', '🎥'], type: 'video' },
-        { text: ['音频', '语音', 'audio', 'voice', '🎵'], type: 'audio' },
-        { text: ['文件', 'document', 'file', '📎'], type: 'document' },
-      ];
-
       const lowerText = text.toLowerCase();
-      for (const indicator of mediaIndicators) {
-        if (indicator.text.some(indicatorText => lowerText.includes(indicatorText))) {
-          // Try to find an unused file matching the expected type
-          for (const file of mediaFilesByType[indicator.type]) {
-            if (!usedMediaFiles.has(file)) {
-              mediaFilename = file;
-              mediaType = getMediaType(file);
-              cleanMessage = '<Media omitted>';
-              usedMediaFiles.add(file);
-              break;
-            }
-          }
-          if (!mediaFilename && indicator.type !== 'document') {
-            // Fallback: try any unused file if no type match found
-            for (const file of mediaFilesByType.unknown) {
-              if (!usedMediaFiles.has(file)) {
-                mediaFilename = file;
-                mediaType = getMediaType(file);
-                cleanMessage = '<Media omitted>';
-                usedMediaFiles.add(file);
-                break;
-              }
-            }
-          }
-          if (mediaFilename) break;
+      for (const indicator of MEDIA_INDICATORS) {
+        if (!indicator.keywords.some(kw => lowerText.includes(kw))) continue;
+        const result = findUnusedMediaFile(mediaFilesByType, usedMediaFiles, indicator.type, indicator.type !== 'document');
+        if (result) {
+          mediaFilename = result.filename;
+          mediaType = result.type;
+          cleanMessage = '<Media omitted>';
+          usedMediaFiles.add(result.filename);
+          break;
         }
       }
     }
 
-    // Check for Chinese media omitted indicators
-    if (cleanMessage.endsWith('圖片已略去') || cleanMessage.endsWith('视频已略去') ||
-        cleanMessage.endsWith('音频已略去') || cleanMessage.endsWith('文件已略去')) {
-      cleanMessage = cleanMessage.replace(/(圖片|视频|音频|文件)已略去$/, '<Media omitted>');
-    }
+    cleanMessage = cleanMessage.replace(MEDIA_OMITTED_RE, '<Media omitted>');
 
     messages.push({
       chatId,
